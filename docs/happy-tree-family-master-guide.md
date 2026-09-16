@@ -171,6 +171,8 @@ These stages match the `find-my-grave-dev-roadmap.md` document. Each one needs C
 - Stage 6 — Generation Name Book (字辈 tracker)
 - Stage 7 — Bilingual Toggle & Polish (English/Chinese switch, visuals)
 - Stage 8 — Real Family Pilot (using it for real, no new code)
+### ⚠️ Before Stage 8 (Real Family Pilot) — pre-launch checklist
+- [ ] Turn **Confirm email** back ON in Supabase (Authentication → Sign In / Providers → User Signups) — it was switched off during Stage 1b for easier testing.
 
 Mark off each stage here as you complete it, so your "resume" message can just say the stage name:
 
