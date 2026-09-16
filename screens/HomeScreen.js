@@ -1,6 +1,17 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I — easy to read aloud
+
+function generateJoinCode(length = 6) {
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  }
+  return code;
+}
 
 export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
@@ -8,12 +19,13 @@ export default function HomeScreen() {
   const [familyName, setFamilyName] = useState('');
   const [surnameCn, setSurnameCn] = useState('');
   const [creating, setCreating] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     fetchFamilies();
   }, []);
 
-  // Load every family this logged-in user belongs to
   async function fetchFamilies() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -21,7 +33,7 @@ export default function HomeScreen() {
 
     const { data, error } = await supabase
       .from('family_members')
-      .select('role, families(id, name, surname_cn)')
+      .select('role, families(id, name, surname_cn, join_code)')
       .eq('user_id', user.id);
 
     if (error) {
@@ -46,24 +58,33 @@ export default function HomeScreen() {
       return;
     }
 
-    // 1. Create the family
-    const { data: family, error: familyError } = await supabase
-      .from('families')
-      .insert({
-        name: familyName.trim(),
-        surname_cn: surnameCn.trim() || null,
-        created_by: user.id,
-      })
-      .select()
-      .single();
+    let family = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 5 && !family; attempt++) {
+      const { data, error } = await supabase
+        .from('families')
+        .insert({
+          name: familyName.trim(),
+          surname_cn: surnameCn.trim() || null,
+          created_by: user.id,
+          join_code: generateJoinCode(),
+        })
+        .select()
+        .single();
 
-    if (familyError) {
-      Alert.alert('Error creating family', familyError.message);
+      if (!error) {
+        family = data;
+      } else {
+        lastError = error;
+      }
+    }
+
+    if (!family) {
+      Alert.alert('Error creating family', lastError?.message || 'Please try again.');
       setCreating(false);
       return;
     }
 
-    // 2. Make the creator its first admin
     const { error: memberError } = await supabase
       .from('family_members')
       .insert({
@@ -81,7 +102,120 @@ export default function HomeScreen() {
     setFamilyName('');
     setSurnameCn('');
     setCreating(false);
-    fetchFamilies(); // refresh the list
+    fetchFamilies();
+  }
+
+  async function handleJoinFamily() {
+    const code = joinCodeInput.trim().toUpperCase();
+    if (!code) {
+      Alert.alert('Join code required', 'Ask a family admin for their 6-character join code.');
+      return;
+    }
+    setJoining(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+       Alert.alert('Not logged in', 'Please log out and log back in.');
+      setCreating(false);
+      return;
+    }
+
+    let family = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < 5 && !family; attempt++) {
+      const { data, error } = await supabase
+        .from('families')
+        .insert({
+          name: familyName.trim(),
+          surname_cn: surnameCn.trim() || null,
+          created_by: user.id,
+          join_code: generateJoinCode(),
+        })
+        .select()
+        .single();
+
+      if (!error) {
+        family = data;
+      } else {
+        lastError = error;
+      }
+    }
+
+    if (!family) {
+      Alert.alert('Error creating family', lastError?.message || 'Please try again.');
+      setCreating(false);
+      return;
+    }
+
+    const { error: memberError } = await supabase
+      .from('family_members')
+      .insert({
+        family_id: family.id,
+        user_id: user.id,
+        role: 'admin',
+      });
+
+    if (memberError) {
+      Alert.alert('Error joining family as admin', memberError.message);
+      setCreating(false);
+      return;
+    }
+
+    setFamilyName('');
+    setSurnameCn('');
+    setCreating(false);
+    fetchFamilies();
+  }
+
+  async function handleJoinFamily() {
+    const code = joinCodeInput.trim().toUpperCase();
+    if (!code) {
+      Alert.alert('Join code required', 'Ask a family admin for their 6-character join code.');
+      return;
+    }
+    setJoining(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      Alert.alert('Not logged in', 'Please log out and log back in.');
+      setJoining(false);
+      return;
+    }
+
+    const { data: family, error: findError } = await supabase
+      .from('families')
+      .select('id, name')
+      .eq('join_code', code)
+      .single();
+
+    if (findError || !family) {
+      Alert.alert('Family not found', 'Double check the code and try again.');
+      setJoining(false);
+      return;
+    }
+
+    const { error: joinError } = await supabase
+      .from('family_members')
+      .insert({
+        family_id: family.id,
+        user_id: user.id,
+        role: 'member',
+      });
+
+    if (joinError) {
+      if (joinError.code === '23505') {
+        Alert.alert('Already a member', `You're already part of "${family.name}".`);
+      } else {
+        Alert.alert('Error joining family', joinError.message);
+      }
+      setJoining(false);
+      return;
+    }
+
+    Alert.alert('Joined!', `You've joined "${family.name}".`);
+    setJoinCodeInput('');
+    setJoining(false);
+    fetchFamilies();
   }
 
   async function handleLogout() {
@@ -97,7 +231,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Text style={styles.heading}>Your Families</Text>
 
       <FlatList
@@ -105,7 +239,10 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.families.id}
         renderItem={({ item }) => (
           <View style={styles.familyRow}>
-            <Text style={styles.familyName}>{item.families.name}</Text>
+            <View>
+              <Text style={styles.familyName}>{item.families.name}</Text>
+              <Text style={styles.familyCode}>Join code: {item.families.join_code}</Text>
+            </View>
             <Text style={styles.familyRole}>{item.role}</Text>
           </View>
         )}
@@ -134,10 +271,26 @@ export default function HomeScreen() {
         />
       </View>
 
+      <View style={styles.form}>
+        <Text style={styles.formHeading}>Join a Family</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter 6-character join code"
+          value={joinCodeInput}
+          onChangeText={setJoinCodeInput}
+          autoCapitalize="characters"
+        />
+        <Button
+          title={joining ? 'Joining...' : 'Join Family'}
+          onPress={handleJoinFamily}
+          disabled={joining}
+        />
+      </View>
+
       <View style={styles.logoutButton}>
         <Button title="Log Out" onPress={handleLogout} color="#999" />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -146,8 +299,9 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   heading: { fontSize: 22, fontWeight: 'bold', marginBottom: 12 },
   list: { maxHeight: 200, marginBottom: 20 },
-  familyRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  familyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
   familyName: { fontSize: 16 },
+  familyCode: { fontSize: 12, color: '#888', marginTop: 2 },
   familyRole: { fontSize: 14, color: '#888' },
   emptyText: { color: '#888', fontStyle: 'italic' },
   form: { marginBottom: 30 },

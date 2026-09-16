@@ -167,7 +167,10 @@ These stages match the `find-my-grave-dev-roadmap.md` document. Each one needs C
 4. Run `npx expo start`, scan the QR code again, test on your phone.
 5. Works as expected → commit & push (Source Control → message → checkmark → Sync).
 6. Doesn't work / looks wrong → come back and describe/screenshot what happened instead.
-7. Once a stage (or sub-stage) is fully working and committed, suggest starting a new chat to keep conversations short and Claude's usage efficient. If so, guide me through exactly what to do: update this guide's checklist and "Current Codebase State" section to reflect what's done, commit those doc changes, then give me the exact copy-pasteable resume message to paste into the new chat (see "HOW TO RESUME IN A NEW CHAT" at the top).
+7. Once a stage (or sub-stage) is fully working and committed, use your own discretion on whether to suggest a new chat:
+   - If this chat is still short, just continue with the next step/stage in the same chat — no need to force a switch.
+   - If the current step/stage/phase is getting long (lots of back-and-forth, long code blocks), find a natural checkpoint and suggest starting a new chat to keep things manageable.
+   - Either way, when a new chat is warranted, guide me through exactly what to do: update this guide's checklist and "Current Codebase State" section to reflect what's done, commit those doc changes, then give me the exact copy-pasteable resume message to paste into the new chat (see "HOW TO RESUME IN A NEW CHAT" at the top).
 
 **The stages, in order (see roadmap doc for full descriptions):**
 - Stage 1 — Accounts & Families (sign up, create/join family, invites)
