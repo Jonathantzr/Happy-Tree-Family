@@ -16,6 +16,9 @@ When your free usage resets and you need to start a new conversation, do this:
 
 4. If something broke or you're stuck rather than just continuing, say that instead — describe or screenshot exactly what you see.
 
+**Important — how to explain things to me:**
+I have some old coding background but I'm rusty and not confident. Please explain everything as if I'm a complete beginner — don't assume I know what a term means just because it sounds common (e.g. explain what "commit," "terminal," "package," "session" mean in context if you use them). Always give exact copy-pasteable commands and exact file locations, not just descriptions of what to do.
+
 ---
 
 ## PROJECT VISION & CONTEXT (so a new chat understands the full picture, not just the specs)
@@ -60,6 +63,7 @@ Simple, modern, with a touch of traditional — not sterile/generic, not overly 
 - **No GPS survey work and no crowdsourced/public-pin model for Phase 1.** Each family's grave/route data is only relevant to that family anyway, so the app launches empty and grows entirely through family admins entering their own data whenever they're able to visit.
 - **Login: Email + Google sign-in** for Phase 1 (free, simple) — Phone/SMS was considered but requires a paid SMS service at scale, deferred unless real usage demands it.
 - **UI language: English + Chinese toggle from Phase 1**, decided early deliberately since retrofitting bilingual support after screens are built is much more expensive than building it in from the start. (Separate from family data itself — names in Chinese characters were always supported regardless of UI language.)
+- **Auto-matching/consolidating duplicate edit requests** (e.g. two family members separately adding the same relative) is deliberately deferred to Phase 2, same as the tree-editing conflict resolution already noted above — a simple "pending request queue" approach is enough for Phase 1, admin can eyeball duplicates manually.
 
 ---
 
@@ -161,6 +165,7 @@ These stages match the `find-my-grave-dev-roadmap.md` document. Each one needs C
 4. Run `npx expo start`, scan the QR code again, test on your phone.
 5. Works as expected → commit & push (Source Control → message → checkmark → Sync).
 6. Doesn't work / looks wrong → come back and describe/screenshot what happened instead.
+7. Once a stage (or sub-stage) is fully working and committed, suggest starting a new chat to keep conversations short and Claude's usage efficient. If so, guide me through exactly what to do: update this guide's checklist and "Current Codebase State" section to reflect what's done, commit those doc changes, then give me the exact copy-pasteable resume message to paste into the new chat (see "HOW TO RESUME IN A NEW CHAT" at the top).
 
 **The stages, in order (see roadmap doc for full descriptions):**
 - Stage 1 — Accounts & Families (sign up, create/join family, invites)
@@ -179,6 +184,10 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - [X] Setup (Part 1)
 - [X] Database connected (Part 2)
 - [ ] Stage 1 — Accounts & Families
+  - [X] Stage 1a — Navigation shell (Welcome/Home screens wired up)
+  - [X] Stage 1b — Email/password sign up, login, session persistence, logout
+  - [ ] Stage 1c — Create a family
+  - [ ] Stage 1d — Join a family via a short join code (in place of a formal invite system — no `invites` table exists in the schema)
 - [ ] Stage 2 — People & Biographies
 - [ ] Stage 3 — Grave Route Finder
 - [ ] Stage 4 — QR Codes
@@ -186,6 +195,16 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - [ ] Stage 6 — Generation Name Book
 - [ ] Stage 7 — Bilingual Toggle & Polish
 - [ ] Stage 8 — Real Family Pilot
+
+---
+
+## CURRENT CODEBASE STATE (update this as you go)
+
+- `lib/supabase.js` — Supabase client, reads keys from `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`). Uses AsyncStorage for session persistence.
+- `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home (logged in) screens automatically based on Supabase auth session.
+- `screens/WelcomeScreen.js` — email/password sign up + login form.
+- `screens/HomeScreen.js` — placeholder "logged in" screen with a Log Out button. This is where Stage 1c/1d (create/join family) should be built.
+- Note: this project requires `npx expo start --tunnel` every time (see Troubleshooting).
 
 ---
 
