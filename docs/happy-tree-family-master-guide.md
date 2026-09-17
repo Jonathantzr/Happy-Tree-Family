@@ -192,7 +192,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
   - [X] Stage 1a — Navigation shell (Welcome/Home screens wired up)
   - [X] Stage 1b — Email/password sign up, login, session persistence, logout
   - [X] Stage 1c — Create a family
-  - [ ] Stage 1d — Join a family via a short join code (in place of a formal invite system — no `invites` table exists in the schema)
+  - [X] Stage 1d — Join a family via a short join code (in place of a formal invite system — no `invites` table exists in the schema)
 - [ ] Stage 2 — People & Biographies
 - [ ] Stage 3 — Grave Route Finder
 - [ ] Stage 4 — QR Codes
@@ -208,7 +208,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - `lib/supabase.js` — Supabase client, reads keys from `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`). Uses AsyncStorage for session persistence.
 - `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home (logged in) screens automatically based on Supabase auth session.
 - `screens/WelcomeScreen.js` — email/password sign up + login form.
-- `screens/HomeScreen.js` — shows the logged-in user's families (name + role) and a form to create a new family (inserts into `families` + `family_members`, creator becomes admin). This is where Stage 1d (join family) should be built next.
+- `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family (creator becomes admin), and lets them join an existing family by entering a 6-character join code. Uses `families.join_code` in Supabase.
 - Note: this project requires `npx expo start --tunnel` every time (see Troubleshooting).
 
 ---
