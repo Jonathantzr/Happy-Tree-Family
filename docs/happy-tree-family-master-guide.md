@@ -64,6 +64,9 @@ Simple, modern, with a touch of traditional — not sterile/generic, not overly 
 - **Login: Email + Google sign-in** for Phase 1 (free, simple) — Phone/SMS was considered but requires a paid SMS service at scale, deferred unless real usage demands it.
 - **UI language: English + Chinese toggle from Phase 1**, decided early deliberately since retrofitting bilingual support after screens are built is much more expensive than building it in from the start. (Separate from family data itself — names in Chinese characters were always supported regardless of UI language.)
 - **Auto-matching/consolidating duplicate edit requests** (e.g. two family members separately adding the same relative) is deliberately deferred to Phase 2, same as the tree-editing conflict resolution already noted above — a simple "pending request queue" approach is enough for Phase 1, admin can eyeball duplicates manually.
+- **Relationship-linking (parent/sibling/spouse/child) moved ahead of biographies within Stage 2**, even though the roadmap originally grouped "People & Biographies" as one stage with relationships implied to come later (at Stage 5, the tree viewer). Reasoning: Stage 5 is a *viewer* for relationships that need to already exist — building it before any relationships are recorded would have nothing to draw. People are added relative to someone already in the tree (starting with yourself), via buttons like "+ Add Parent" / "+ Add Sibling" / "+ Add Spouse" / "+ Add Child" on a person's card — no artificial "how many people in your family" upfront step, since that doesn't capture how people relate to each other anyway.
+- **Person names are captured as a single free-text field** (not separate Chinese/pinyin/English fields as originally scoped) — simpler data entry, works with any keyboard/script. Consequence for later: Stage 6 (Generation Name Book) will need to separately ask for a person's Chinese character when matching it against the family's naming poem, since it's no longer captured automatically as its own field.
+- **No "Living"/"Deceased" label shown by default** — a person's birth/death date (or date range) is shown instead, since that reads more naturally for a memorial app. "Deceased" only appears as a fallback when someone is marked deceased but no date is known at all.
 
 ---
 
@@ -74,6 +77,8 @@ Simple, modern, with a touch of traditional — not sterile/generic, not overly 
 - **No Claude Code, no paid Claude plan.** The owner does not want to pay for Claude Code or GitHub Codespaces. All development happens via: Claude (free chat) providing code/instructions → owner manually implementing them in **VS Code**, which is already installed → testing via the **Expo Go** app on Android (same WiFi network, or `--tunnel` mode if needed) → committing/pushing to GitHub manually via VS Code's Source Control panel.
 - The owner has some past coding background (attended 42, a coding bootcamp/academy, a few months, some years ago) but doesn't remember much — treat as a rusty beginner, not a fresh one. Comfortable with copy-pasting terminal commands when given exact instructions, but needs things spelled out step by step, not assumed.
 - **Every future chat should give copy-pasteable commands and exact file contents/locations — never assume familiarity with tooling.**
+- **Working style:** at the start of each stage/sub-stage, after Claude has whatever file contents it needs, it gives one standalone step-by-step document covering the whole stage (not piecemeal chat replies) — so testing and commits mostly happen without going back and forth in chat. Return to chat only when stuck on a specific step.
+- **Master guide edits are given as a full corrected copy of the file to paste over the whole thing**, not as find-and-replace snippets — after several rounds of edits it's too easy to lose track of exactly what the live file says, so pasting the whole file back is more reliable than hunting for a specific line.
 
 ---
 
@@ -194,6 +199,10 @@ Mark off each stage here as you complete it, so your "resume" message can just s
   - [X] Stage 1c — Create a family
   - [X] Stage 1d — Join a family via a short join code (in place of a formal invite system — no `invites` table exists in the schema)
 - [ ] Stage 2 — People & Biographies
+  - [X] Stage 2a — People list + add a person (name, gender, living/deceased, date picker)
+  - [ ] Stage 2b — Linking people (parent/sibling/spouse/child relationships)
+  - [ ] Stage 2c — Biography view/edit
+  - [ ] Stage 2d — Photos
 - [ ] Stage 3 — Grave Route Finder
 - [ ] Stage 4 — QR Codes
 - [ ] Stage 5 — Interactive Family Tree
@@ -206,9 +215,10 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 ## CURRENT CODEBASE STATE (update this as you go)
 
 - `lib/supabase.js` — Supabase client, reads keys from `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`). Uses AsyncStorage for session persistence.
-- `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home (logged in) screens automatically based on Supabase auth session.
+- `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home/FamilyDetail (logged in) screens automatically based on Supabase auth session.
 - `screens/WelcomeScreen.js` — email/password sign up + login form.
-- `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family (creator becomes admin), and lets them join an existing family by entering a 6-character join code. Uses `families.join_code` in Supabase.
+- `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family or join one by code, and tapping a family navigates to `FamilyDetailScreen`. Uses `families.join_code` in Supabase.
+- `screens/FamilyDetailScreen.js` — shows the list of people in a family (from `persons`, filtered by `family_id`), each showing a birth/death date range under their name (falls back to "Deceased" only if no date is known, or shows nothing if there's no info at all). Form below adds a new person: single free-text Name field (auto-capitalizes), gender, living/deceased toggle, and a native tap-to-pick date for birth/death, allowing dates back to year 1500 (stored as YYYY-MM-DD, shown as DD/MM/YYYY). This is where Stage 2b (linking people via relationships) should be built next.
 - Note: this project requires `npx expo start --tunnel` every time (see Troubleshooting).
 
 ---
@@ -218,4 +228,5 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - If the QR code won't scan/connect, make sure your phone and PC are on the **same WiFi network**. If they're not (or can't be), add `--tunnel` to the command: `npx expo start --tunnel`.
 - **This project specifically needs `--tunnel` every time** — plain `npx expo start` gives "Cannot connect to Expo CLI" on this setup. Always run `npx expo start --tunnel` instead.
 - If VS Code's Source Control panel shows nothing to commit, it means nothing changed since your last push — that's fine, not an error.
+- A yellow "DateTimePicker: `onChange` is deprecated" console warning may appear when using the date picker — this is harmless (the library suggesting a newer prop name), doesn't affect functionality or data, and can be ignored.
 - When in doubt, screenshot what you're seeing and bring it to Claude rather than guessing.
