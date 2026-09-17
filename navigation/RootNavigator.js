@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabase';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
+import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -41,7 +42,10 @@ export default function RootNavigator() {
     <NavigationContainer>
       <Stack.Navigator>
         {session ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <>
+            <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Your Families' }} />
+            <Stack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
+          </>
         ) : (
           <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ title: 'Happy Tree Family' }} />
         )}

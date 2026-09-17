@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 
@@ -13,7 +13,7 @@ function generateJoinCode(length = 6) {
   return code;
 }
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [families, setFamilies] = useState([]);
   const [familyName, setFamilyName] = useState('');
@@ -238,13 +238,19 @@ export default function HomeScreen() {
         data={families}
         keyExtractor={(item) => item.families.id}
         renderItem={({ item }) => (
-          <View style={styles.familyRow}>
+          <Pressable
+            style={styles.familyRow}
+            onPress={() => navigation.navigate('FamilyDetail', {
+              familyId: item.families.id,
+              familyName: item.families.name,
+            })}
+          >
             <View>
               <Text style={styles.familyName}>{item.families.name}</Text>
               <Text style={styles.familyCode}>Join code: {item.families.join_code}</Text>
             </View>
             <Text style={styles.familyRole}>{item.role}</Text>
-          </View>
+          </Pressable>
         )}
         ListEmptyComponent={<Text style={styles.emptyText}>You haven't created or joined a family yet.</Text>}
         style={styles.list}
