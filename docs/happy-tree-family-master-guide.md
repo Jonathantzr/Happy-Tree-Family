@@ -9,19 +9,19 @@ This is your single reference document for the whole build. Keep it open/saved s
 When your free usage resets and you need to start a new conversation, do this:
 
 1. Start a new chat with Claude.
-2. Attach/paste this document, plus the other project files if you have them handy: the PRD (`find-my-grave-PRD-phase1.md`), the database schema (`find-my-grave-db-schema.sql`), and the roadmap (`find-my-grave-dev-roadmap.md`). (Tip: see "Keep Your Files Together" below — if they're saved in your GitHub repo, this gets much easier.)
+2. Attach ONLY this document plus the database schema (`find-my-grave-db-schema.sql`). Don't attach the PRD, roadmap, archive or code files unless Claude asks for a specific piece — every attached file is re-read on every message and uses up the free limit.
 3. Copy-paste this exact message, filling in the blank:
 
-   > I'm building an app called Happy Tree Family — attached is the master guide, PRD, database schema, and roadmap. I've completed up to **[STAGE/PHASE NAME HERE]**. Please pick up from there and give me the next step-by-step instructions, written for a non-technical beginner working in VS Code. I don't have a paid Claude plan, so no Claude Code — just give me copy-pasteable commands and clear instructions.
+   > I'm building an app called Happy Tree Family — attached is the master guide and database schema. I've completed up to **[STAGE/PHASE NAME HERE]**. Please start the next step. Follow the rules in the guide: explain like I'm 5, give changes as find-and-replace (never resend whole files), and if you need to see existing code, ask for only the specific lines. Give the whole stage's steps in one message. I'm on the free plan, no Claude Code.
 
 4. If something broke or you're stuck rather than just continuing, say that instead — describe or screenshot exactly what you see.
 
 **Token-saving & beginner-friendly rules (free chat runs out fast — this matters):**
 1. NEVER re-send a whole existing file (code or docs). Give changes as numbered "find → replace" edits: a line to Ctrl+F for the start, a line for the end, and exactly what goes between/instead.
 2. Explain like I'm 5: numbered steps, one action each, exact file name, exact text to search for, exactly where to paste.
-3. Only ask to see files that are truly needed, and never ask again for files already provided in this chat.
-4. Keep chat replies short — no re-summarising earlier stages, no repeated explanations. Give a whole stage's steps in ONE message so I only return when something breaks.
-5. If a chat is getting long, suggest a checkpoint and a fresh chat early, before the limit hits.
+3. If you need to see existing code, ask me for ONLY the specific function/lines (tell me what to Ctrl+F and copy) — never ask for a whole file.
+4. Keep replies short: no re-summarising earlier stages. Give a whole stage's steps in ONE message so I only return when something breaks.
+5. Suggest a checkpoint and a fresh chat early, before the limit hits. Attach only this guide + the db schema to new chats.
 
 **Important — how to explain things to me:**
 I have some old coding background but I'm rusty and not confident. Please explain everything as if I'm a complete beginner — don't assume I know what a term means just because it sounds common (e.g. explain what "commit," "terminal," "package," "session" mean in context if you use them). Always give exact copy-pasteable commands and exact file locations, not just descriptions of what to do.
@@ -105,6 +105,11 @@ Rather than juggling downloaded files, save them inside your project folder so t
 3. In VS Code's Source Control panel, commit and push (same as Phase 5 below) with a message like `Add project docs`.
 4. Now everything lives at `github.com/yourname/happy-tree-family/docs` — viewable anytime, and easy to reference in new chats by just saying "check the docs folder in my repo" (Claude will need you to paste contents in, as it can't browse your private repo directly — but at least you'll always know where to find them).
 
+---
+
+## SETUP & TROUBLESHOOTING
+Part 1 (Node/GitHub/first app), Part 2 (Supabase setup) and the full troubleshooting notes are in `master-guide-archive.md` — only attach that file if setup breaks or a strange error appears. Reminder: always run `npx expo start --tunnel`.
+
 ## PART 3 — BUILDING THE ACTUAL APP (Stages 1–8)
 
 These stages match the `find-my-grave-dev-roadmap.md` document. Each one needs Claude to write real code specific to that feature — so the pattern for every stage below is the same:
@@ -159,18 +164,13 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 ## CURRENT CODEBASE STATE (update this as you go)
 
 - `lib/supabase.js` — Supabase client, reads keys from `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`). Uses AsyncStorage for session persistence.
+- `lib/personHelpers.js` — small helper functions for the people screen: date formatting (`formatDateDisplay`, `toISODate`, `formatISOToDisplay`, `isoToDate`), the date-range text under a name (`formatPersonMeta`), and a Yes/No popup (`askYesNo`).
 - `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home/FamilyDetail (logged in) screens automatically based on Supabase auth session.
 - `screens/WelcomeScreen.js` — email/password sign up + login form.
 - `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family or join one by code, and tapping a family navigates to `FamilyDetailScreen`. Uses `families.join_code` in Supabase.
 - `screens/FamilyDetailScreen.js` — shows the list of people in a family (from `persons`, filtered by `family_id`), each showing a birth/death date range under their name (falls back to "Deceased" only if no date is known, or shows nothing if there's no info at all). Form below adds a new person: single free-text Name field (auto-capitalizes), gender, living/deceased toggle, and a native tap-to-pick date for birth/death, allowing dates back to year 1500 (stored as YYYY-MM-DD, shown as DD/MM/YYYY). Stage 2b is built here too: each person card has + Parent / + Sibling / + Spouse / + Child (add a new person or link one already added), Edit, and Delete. One shared form at the bottom handles add/edit/link modes. Links show under each name (Parents, Siblings, Spouse, Children — siblings are derived from shared parents, not stored). + Sibling on someone with no parent creates an "Unknown parent of …" placeholder. Linking a parent who has a spouse asks whether the spouse is also a parent. Links can be removed from the Edit form. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
 - Note: this project requires `npx expo start --tunnel` every time (see Troubleshooting).
-
+- `lib/personHelpers.js` — small helper functions for the people screen: date formatting (`formatDateDisplay`, `toISODate`, `formatISOToDisplay`, `isoToDate`), the date-range text under a name (`formatPersonMeta`), and a Yes/No popup (`askYesNo`).
+- Stage 2b is built inside `screens/FamilyDetailScreen.js`: person cards with + Parent / + Sibling / + Spouse / + Child (new or existing person), Edit, Delete; one shared form at the bottom; links shown under names (siblings are derived from shared parents); a placeholder "Unknown parent of …" is created when adding a sibling with no parent; the Edit form lets you remove links. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
 ---
 
-## TROUBLESHOOTING NOTES
-- If `npx expo start` shows errors mentioning missing packages, try running `npm install` first, then `npx expo start` again.
-- If the QR code won't scan/connect, make sure your phone and PC are on the **same WiFi network**. If they're not (or can't be), add `--tunnel` to the command: `npx expo start --tunnel`.
-- **This project specifically needs `--tunnel` every time** — plain `npx expo start` gives "Cannot connect to Expo CLI" on this setup. Always run `npx expo start --tunnel` instead.
-- If VS Code's Source Control panel shows nothing to commit, it means nothing changed since your last push — that's fine, not an error.
-- A yellow "DateTimePicker: `onChange` is deprecated" console warning may appear when using the date picker — this is harmless (the library suggesting a newer prop name), doesn't affect functionality or data, and can be ignored.
-- When in doubt, screenshot what you're seeing and bring it to Claude rather than guessing.

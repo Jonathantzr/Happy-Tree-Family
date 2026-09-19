@@ -1,4 +1,4 @@
-The below is for above "## PART 3 — BUILDING THE ACTUAL APP (Stages 1–8)"
+# Archive — setup, database & troubleshooting
 
 ---
 
@@ -62,3 +62,12 @@ The below is for above "## PART 3 — BUILDING THE ACTUAL APP (Stages 1–8)"
 - A Supabase trigger (`on_auth_user_created`) auto-creates a matching `public.users` row whenever someone signs up via Auth — added during Stage 1c since `families`/`family_members` reference `public.users`, not `auth.users` directly.
 
 ---
+
+
+## TROUBLESHOOTING NOTES
+- If `npx expo start` shows errors mentioning missing packages, try running `npm install` first, then `npx expo start` again.
+- If the QR code won't scan/connect, make sure your phone and PC are on the **same WiFi network**. If they're not (or can't be), add `--tunnel` to the command: `npx expo start --tunnel`.
+- **This project specifically needs `--tunnel` every time** — plain `npx expo start` gives "Cannot connect to Expo CLI" on this setup. Always run `npx expo start --tunnel` instead.
+- If VS Code's Source Control panel shows nothing to commit, it means nothing changed since your last push — that's fine, not an error.
+- A yellow "DateTimePicker: `onChange` is deprecated" console warning may appear when using the date picker — this is harmless (the library suggesting a newer prop name), doesn't affect functionality or data, and can be ignored.
+- When in doubt, screenshot what you're seeing and bring it to Claude rather than guessing.
