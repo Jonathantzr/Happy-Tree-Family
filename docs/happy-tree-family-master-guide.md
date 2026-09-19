@@ -16,6 +16,13 @@ When your free usage resets and you need to start a new conversation, do this:
 
 4. If something broke or you're stuck rather than just continuing, say that instead — describe or screenshot exactly what you see.
 
+**Token-saving & beginner-friendly rules (free chat runs out fast — this matters):**
+1. NEVER re-send a whole existing file (code or docs). Give changes as numbered "find → replace" edits: a line to Ctrl+F for the start, a line for the end, and exactly what goes between/instead.
+2. Explain like I'm 5: numbered steps, one action each, exact file name, exact text to search for, exactly where to paste.
+3. Only ask to see files that are truly needed, and never ask again for files already provided in this chat.
+4. Keep chat replies short — no re-summarising earlier stages, no repeated explanations. Give a whole stage's steps in ONE message so I only return when something breaks.
+5. If a chat is getting long, suggest a checkpoint and a fresh chat early, before the limit hits.
+
 **Important — how to explain things to me:**
 I have some old coding background but I'm rusty and not confident. Please explain everything as if I'm a complete beginner — don't assume I know what a term means just because it sounds common (e.g. explain what "commit," "terminal," "package," "session" mean in context if you use them). Always give exact copy-pasteable commands and exact file locations, not just descriptions of what to do.
 
@@ -78,7 +85,7 @@ Simple, modern, with a touch of traditional — not sterile/generic, not overly 
 - The owner has some past coding background (attended 42, a coding bootcamp/academy, a few months, some years ago) but doesn't remember much — treat as a rusty beginner, not a fresh one. Comfortable with copy-pasting terminal commands when given exact instructions, but needs things spelled out step by step, not assumed.
 - **Every future chat should give copy-pasteable commands and exact file contents/locations — never assume familiarity with tooling.**
 - **Working style:** at the start of each stage/sub-stage, after Claude has whatever file contents it needs, it gives one standalone step-by-step document covering the whole stage (not piecemeal chat replies) — so testing and commits mostly happen without going back and forth in chat. Return to chat only when stuck on a specific step.
-- **Master guide edits are given as a full corrected copy of the file to paste over the whole thing**, not as find-and-replace snippets — after several rounds of edits it's too easy to lose track of exactly what the live file says, so pasting the whole file back is more reliable than hunting for a specific line.
+- **Master guide edits are given as find-and-replace snippets** (a line to Ctrl+F, then what to replace/insert), never as a full copy of the file — the full file wastes limited chat tokens.
 
 ---
 
@@ -97,69 +104,6 @@ Rather than juggling downloaded files, save them inside your project folder so t
 2. Move/save these files into it: this master guide, the PRD, the database schema, the roadmap, the wireframes, the user flow diagram.
 3. In VS Code's Source Control panel, commit and push (same as Phase 5 below) with a message like `Add project docs`.
 4. Now everything lives at `github.com/yourname/happy-tree-family/docs` — viewable anytime, and easy to reference in new chats by just saying "check the docs folder in my repo" (Claude will need you to paste contents in, as it can't browse your private repo directly — but at least you'll always know where to find them).
-
----
-
-## PART 1 — SETUP (Node, GitHub, first blank app running)
-
-### Phase 1 — Check/install Node.js
-1. Open VS Code → **Terminal → New Terminal**.
-2. Type `node -v` and press Enter.
-3. Version number shown → done, skip to Phase 2.
-4. Error shown → install from https://nodejs.org (LTS version), restart PC, retest.
-
-### Phase 2 — Clone your GitHub repo into VS Code
-1. On github.com, open your `happy-tree-family` repo (empty repos still have this).
-2. Click green **Code** button → **HTTPS** tab → copy the URL.
-3. In VS Code: `Ctrl+Shift+P` → type `Git: Clone` → paste URL → choose a save folder → **Open** when prompted.
-
-### Phase 3 — Create the app project
-1. Terminal in VS Code, confirm you're inside the `happy-tree-family` folder.
-2. Run: `npx create-expo-app@latest . --template blank`
-3. Accept any defaults, wait for it to finish.
-
-### Phase 4 — Run it and see it on your phone
-1. Run: `npx expo start`
-2. Scan the QR code shown using the **Expo Go** app on your Android phone.
-3. A blank/plain screen loading on your phone = success.
-4. `Ctrl+C` in terminal to stop it later.
-
-### Phase 5 — Save progress to GitHub
-1. VS Code → **Source Control** icon (left sidebar).
-2. Type a commit message (e.g. `Initial Expo project setup`).
-3. Click the checkmark (**Commit**), then **Sync Changes** / **Push**.
-4. Refresh your repo on github.com to confirm files are there.
-
-**✅ Checkpoint: "Setup complete" — you should have a blank app running on your phone, and code saved on GitHub.**
-
----
-
-## PART 2 — CONNECT THE DATABASE (Supabase)
-
-### Phase 6 — Create your Supabase project
-1. Go to supabase.com, log in (you've already connected your account).
-2. Click **New Project**. Name it `happy-tree-family`, set a database password (save it somewhere safe — a notes app is fine), pick a region close to Malaysia (e.g. Singapore).
-3. Wait a minute or two for it to finish setting up.
-
-### Phase 7 — Load the database structure
-1. In your Supabase project, click **SQL Editor** in the left sidebar.
-2. Open the `find-my-grave-db-schema.sql` file (from earlier in this project) in VS Code, copy its entire contents.
-3. Paste it into the Supabase SQL Editor, click **Run**.
-4. Check the **Table Editor** in Supabase — you should now see tables like `persons`, `graves`, `route_steps`, etc.
-
-### Phase 8 — Connect your app to Supabase
-1. In Supabase, go to **Project Settings → API**. Copy the **Project URL** and the **anon public key**.
-2. In VS Code terminal (inside your project folder), run:
-   ```
-   npx expo install @supabase/supabase-js
-   ```
-3. Come back to a new Claude chat at this point and say you've reached Phase 8 — Claude will give you the exact code file to create that connects your app to these keys (this part needs real code written, not just commands).
-
-**✅ Checkpoint: "Database connected" — your app can now talk to a real database.**
-
-- A Supabase trigger (`on_auth_user_created`) auto-creates a matching `public.users` row whenever someone signs up via Auth — added during Stage 1c since `families`/`family_members` reference `public.users`, not `auth.users` directly.
-
----
 
 ## PART 3 — BUILDING THE ACTUAL APP (Stages 1–8)
 
@@ -200,7 +144,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
   - [X] Stage 1d — Join a family via a short join code (in place of a formal invite system — no `invites` table exists in the schema)
 - [ ] Stage 2 — People & Biographies
   - [X] Stage 2a — People list + add a person (name, gender, living/deceased, date picker)
-  - [ ] Stage 2b — Linking people (parent/sibling/spouse/child relationships)
+  - [X] Stage 2b — Linking people (parent/sibling/spouse/child relationships)
   - [ ] Stage 2c — Biography view/edit
   - [ ] Stage 2d — Photos
 - [ ] Stage 3 — Grave Route Finder
@@ -218,7 +162,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home/FamilyDetail (logged in) screens automatically based on Supabase auth session.
 - `screens/WelcomeScreen.js` — email/password sign up + login form.
 - `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family or join one by code, and tapping a family navigates to `FamilyDetailScreen`. Uses `families.join_code` in Supabase.
-- `screens/FamilyDetailScreen.js` — shows the list of people in a family (from `persons`, filtered by `family_id`), each showing a birth/death date range under their name (falls back to "Deceased" only if no date is known, or shows nothing if there's no info at all). Form below adds a new person: single free-text Name field (auto-capitalizes), gender, living/deceased toggle, and a native tap-to-pick date for birth/death, allowing dates back to year 1500 (stored as YYYY-MM-DD, shown as DD/MM/YYYY). This is where Stage 2b (linking people via relationships) should be built next.
+- `screens/FamilyDetailScreen.js` — shows the list of people in a family (from `persons`, filtered by `family_id`), each showing a birth/death date range under their name (falls back to "Deceased" only if no date is known, or shows nothing if there's no info at all). Form below adds a new person: single free-text Name field (auto-capitalizes), gender, living/deceased toggle, and a native tap-to-pick date for birth/death, allowing dates back to year 1500 (stored as YYYY-MM-DD, shown as DD/MM/YYYY). Stage 2b is built here too: each person card has + Parent / + Sibling / + Spouse / + Child (add a new person or link one already added), Edit, and Delete. One shared form at the bottom handles add/edit/link modes. Links show under each name (Parents, Siblings, Spouse, Children — siblings are derived from shared parents, not stored). + Sibling on someone with no parent creates an "Unknown parent of …" placeholder. Linking a parent who has a spouse asks whether the spouse is also a parent. Links can be removed from the Edit form. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
 - Note: this project requires `npx expo start --tunnel` every time (see Troubleshooting).
 
 ---

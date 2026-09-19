@@ -1,0 +1,64 @@
+The below is for above "## PART 3 — BUILDING THE ACTUAL APP (Stages 1–8)"
+
+---
+
+## PART 1 — SETUP (Node, GitHub, first blank app running)
+
+### Phase 1 — Check/install Node.js
+1. Open VS Code → **Terminal → New Terminal**.
+2. Type `node -v` and press Enter.
+3. Version number shown → done, skip to Phase 2.
+4. Error shown → install from https://nodejs.org (LTS version), restart PC, retest.
+
+### Phase 2 — Clone your GitHub repo into VS Code
+1. On github.com, open your `happy-tree-family` repo (empty repos still have this).
+2. Click green **Code** button → **HTTPS** tab → copy the URL.
+3. In VS Code: `Ctrl+Shift+P` → type `Git: Clone` → paste URL → choose a save folder → **Open** when prompted.
+
+### Phase 3 — Create the app project
+1. Terminal in VS Code, confirm you're inside the `happy-tree-family` folder.
+2. Run: `npx create-expo-app@latest . --template blank`
+3. Accept any defaults, wait for it to finish.
+
+### Phase 4 — Run it and see it on your phone
+1. Run: `npx expo start`
+2. Scan the QR code shown using the **Expo Go** app on your Android phone.
+3. A blank/plain screen loading on your phone = success.
+4. `Ctrl+C` in terminal to stop it later.
+
+### Phase 5 — Save progress to GitHub
+1. VS Code → **Source Control** icon (left sidebar).
+2. Type a commit message (e.g. `Initial Expo project setup`).
+3. Click the checkmark (**Commit**), then **Sync Changes** / **Push**.
+4. Refresh your repo on github.com to confirm files are there.
+
+**✅ Checkpoint: "Setup complete" — you should have a blank app running on your phone, and code saved on GitHub.**
+
+---
+
+## PART 2 — CONNECT THE DATABASE (Supabase)
+
+### Phase 6 — Create your Supabase project
+1. Go to supabase.com, log in (you've already connected your account).
+2. Click **New Project**. Name it `happy-tree-family`, set a database password (save it somewhere safe — a notes app is fine), pick a region close to Malaysia (e.g. Singapore).
+3. Wait a minute or two for it to finish setting up.
+
+### Phase 7 — Load the database structure
+1. In your Supabase project, click **SQL Editor** in the left sidebar.
+2. Open the `find-my-grave-db-schema.sql` file (from earlier in this project) in VS Code, copy its entire contents.
+3. Paste it into the Supabase SQL Editor, click **Run**.
+4. Check the **Table Editor** in Supabase — you should now see tables like `persons`, `graves`, `route_steps`, etc.
+
+### Phase 8 — Connect your app to Supabase
+1. In Supabase, go to **Project Settings → API**. Copy the **Project URL** and the **anon public key**.
+2. In VS Code terminal (inside your project folder), run:
+   ```
+   npx expo install @supabase/supabase-js
+   ```
+3. Come back to a new Claude chat at this point and say you've reached Phase 8 — Claude will give you the exact code file to create that connects your app to these keys (this part needs real code written, not just commands).
+
+**✅ Checkpoint: "Database connected" — your app can now talk to a real database.**
+
+- A Supabase trigger (`on_auth_user_created`) auto-creates a matching `public.users` row whenever someone signs up via Auth — added during Stage 1c since `families`/`family_members` reference `public.users`, not `auth.users` directly.
+
+---
