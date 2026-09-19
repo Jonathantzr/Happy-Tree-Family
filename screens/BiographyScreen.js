@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, ScrollView, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Alert, StyleSheet,
+  KeyboardAvoidingView, Platform, Alert, StyleSheet, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 
 export default function BiographyScreen({ route }) {
   const { personId, personName } = route.params;
@@ -15,6 +17,7 @@ export default function BiographyScreen({ route }) {
   const [summary, setSummary] = useState('');
   const [occupation, setOccupation] = useState('');
   const [hometown, setHometown] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadBio();
@@ -62,6 +65,69 @@ export default function BiographyScreen({ route }) {
     }
     setBio(data);
     setEditing(false);
+  }
+
+    const photos = bio?.photo_urls || [];
+
+  // saves the list of photo links into the biography (creates the biography row if needed)
+  async function savePhotoList(newList) {
+    const { data: userData } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('biographies')
+      .upsert(
+        {
+          person_id: personId,
+          photo_urls: newList,
+          updated_by: userData?.user?.id || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'person_id' }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+    setBio(data);
+  }
+
+  async function addPhoto() {
+    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6, base64: true });
+    if (result.canceled) return;
+    setUploading(true);
+    try {
+      const asset = result.assets[0];
+      const mime = asset.mimeType || 'image/jpeg';
+      const ext = mime.split('/')[1] || 'jpg';
+      const path = `${personId}/${Date.now()}.${ext}`;
+      const fileData = decode(asset.base64);
+      const { error: upErr } = await supabase.storage
+        .from('bio-photos')
+        .upload(path, fileData, { contentType: mime });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage.from('bio-photos').getPublicUrl(path);
+      await savePhotoList([...photos, urlData.publicUrl]);
+    } catch (e) {
+      Alert.alert('Could not add photo', e.message);
+    }
+    setUploading(false);
+  }
+
+  function confirmDeletePhoto(url) {
+    Alert.alert('Delete this photo?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deletePhoto(url) },
+    ]);
+  }
+
+  async function deletePhoto(url) {
+    try {
+      const path = url.split('/bio-photos/')[1];
+      if (path) {
+        await supabase.storage.from('bio-photos').remove([decodeURIComponent(path)]);
+      }
+      await savePhotoList(photos.filter((u) => u !== url));
+    } catch (e) {
+      Alert.alert('Could not delete photo', e.message);
+    }
   }
 
   if (loading) {
@@ -154,6 +220,26 @@ export default function BiographyScreen({ route }) {
               </Pressable>
             </View>
           )}
+          <View style={styles.photoSection}>
+            <Text style={styles.label}>Photos</Text>
+            {photos.length === 0 ? (
+              <Text style={styles.emptyText}>No photos yet.</Text>
+            ) : (
+              <View style={styles.photoGrid}>
+                {photos.map((url) => (
+                  <Pressable key={url} onLongPress={() => confirmDeletePhoto(url)} style={styles.photoBox}>
+                    <Image source={{ uri: url }} style={styles.photo} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {photos.length > 0 ? (
+              <Text style={styles.hint}>Long-press a photo to delete it.</Text>
+            ) : null}
+            <Pressable onPress={addPhoto} disabled={uploading} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{uploading ? 'Uploading...' : 'Add photo'}</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -181,4 +267,9 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   secondaryButton: { padding: 14, alignItems: 'center', marginTop: 6 },
   secondaryButtonText: { color: '#555', fontSize: 16 },
+  photoSection: { marginTop: 28 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  photoBox: { width: '48%', aspectRatio: 1 },
+  photo: { width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#eee' },
+  hint: { fontSize: 12, color: '#888', marginTop: 8 },
 });
