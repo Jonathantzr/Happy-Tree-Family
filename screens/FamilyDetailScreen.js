@@ -8,10 +8,8 @@ import { formatDateDisplay, toISODate, formatPersonMeta, isoToDate, askYesNo } f
 
 export default function FamilyDetailScreen({ route, navigation }) {
   const { familyId, familyName } = route.params;
-
   const [loading, setLoading] = useState(true);
   const [people, setPeople] = useState([]);
-
   const [name, setName] = useState('');
   const [gender, setGender] = useState(null); // 'M' | 'F' | 'other' | null
   const [isDeceased, setIsDeceased] = useState(false);
@@ -400,6 +398,12 @@ export default function FamilyDetailScreen({ route, navigation }) {
                   </View>
 
                   <View style={styles.actionRow}>
+                    <Pressable
+                      onPress={() => navigation.navigate('Biography', { personId: item.id, personName: personLabel(item) })}
+                      style={styles.smallButton}
+                    >
+                      <Text style={styles.smallButtonText}>Biography</Text>
+                    </Pressable>
                     <Pressable onPress={() => startEdit(item)} style={styles.smallButton}>
                       <Text style={styles.smallButtonText}>Edit</Text>
                     </Pressable>

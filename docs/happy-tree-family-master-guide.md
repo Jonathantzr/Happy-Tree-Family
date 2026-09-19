@@ -150,7 +150,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - [ ] Stage 2 — People & Biographies
   - [X] Stage 2a — People list + add a person (name, gender, living/deceased, date picker)
   - [X] Stage 2b — Linking people (parent/sibling/spouse/child relationships)
-  - [ ] Stage 2c — Biography view/edit
+  - [X] Stage 2c — Biography view/edit
   - [ ] Stage 2d — Photos
 - [ ] Stage 3 — Grave Route Finder
 - [ ] Stage 4 — QR Codes
@@ -172,5 +172,6 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - Note: this project requires `npx expo start --tunnel` every time (details in `master-guide-archive.md`).
 - `lib/personHelpers.js` — small helper functions for the people screen: date formatting (`formatDateDisplay`, `toISODate`, `formatISOToDisplay`, `isoToDate`), the date-range text under a name (`formatPersonMeta`), and a Yes/No popup (`askYesNo`).
 - Stage 2b is built inside `screens/FamilyDetailScreen.js`: person cards with + Parent / + Sibling / + Spouse / + Child (new or existing person), Edit, Delete; one shared form at the bottom; links shown under names (siblings are derived from shared parents); a placeholder "Unknown parent of …" is created when adding a sibling with no parent; the Edit form lets you remove links. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
+- `screens/BiographyScreen.js` — view/edit one person's biography (occupation, hometown, life summary) stored in `biographies` (one row per person, saved with upsert on `person_id`). Reached from the "Biography" button on each person card in `FamilyDetailScreen.js`; registered as `Biography` in `navigation/RootNavigator.js`. Row Level Security policies let only members of that person's family read/insert/update it. Photos (`photo_urls`) are left for Stage 2d.
 ---
 

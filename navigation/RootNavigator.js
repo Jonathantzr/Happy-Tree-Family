@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
+import BiographyScreen from '../screens/BiographyScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -45,6 +46,11 @@ export default function RootNavigator() {
           <>
             <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Your Families' }} />
             <Stack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
+            <Stack.Screen
+              name="Biography"
+              component={BiographyScreen}
+              options={({ route }) => ({ title: route.params?.personName || 'Biography' })}
+            />
           </>
         ) : (
           <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ title: 'Happy Tree Family' }} />
