@@ -142,7 +142,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 
 - [X] Setup (Part 1)
 - [X] Database connected (Part 2)
-- [ ] Stage 1 — Accounts & Families
+- [X] Stage 1 — Accounts & Families
   - [X] Stage 1a — Navigation shell (Welcome/Home screens wired up)
   - [X] Stage 1b — Email/password sign up, login, session persistence, logout
   - [X] Stage 1c — Create a family
