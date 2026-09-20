@@ -152,7 +152,7 @@ Mark off each stage here as you complete it, so your "resume" message can just s
   - [X] Stage 2b — Linking people (parent/sibling/spouse/child relationships)
   - [X] Stage 2c — Biography view/edit
   - [X] Stage 2d — Photos
-- [ ] Stage 3 — Grave Route Finder
+- [X] Stage 3 — Grave Route Finder
 - [ ] Stage 4 — QR Codes
 - [ ] Stage 5 — Interactive Family Tree
 - [ ] Stage 6 — Generation Name Book
@@ -174,5 +174,6 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - Stage 2b is built inside `screens/FamilyDetailScreen.js`: person cards with + Parent / + Sibling / + Spouse / + Child (new or existing person), Edit, Delete; one shared form at the bottom; links shown under names (siblings are derived from shared parents); a placeholder "Unknown parent of …" is created when adding a sibling with no parent; the Edit form lets you remove links. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
 - `screens/BiographyScreen.js` — view/edit one person's biography (occupation, hometown, life summary) stored in `biographies` (one row per person, saved with upsert on `person_id`). Reached from the "Biography" button on each person card in `FamilyDetailScreen.js`; registered as `Biography` in `navigation/RootNavigator.js`. Row Level Security policies let only members of that person's family read/insert/update it. Photos: "Add photo" picks an image (expo-image-picker), uploads it to the public Supabase Storage bucket `bio-photos` at `<person_id>/<timestamp>.<ext>`, and stores the public links in `biographies.photo_urls`; long-press a photo to delete. Storage policies let only members of that person's family upload/delete.
 - Uploads use base64 via the base64-arraybuffer package.
+- screens/GraveRouteScreen.js — one grave per person (table graves) plus ordered breadcrumb steps (route_steps, optional photo per step, Up/Down reorder). Reached from the "Grave" button on each person card; registered as GraveRoute in RootNavigator.js. Step photos go in the public Storage bucket route-photos at <grave_id>/<timestamp>.<ext>. Row Level Security limits graves, steps and photo uploads to members of that person's family (public read for the QR scan page is NOT set up yet — that's Stage 4).
 ---
 
