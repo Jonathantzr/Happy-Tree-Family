@@ -405,12 +405,20 @@ export default function FamilyDetailScreen({ route, navigation }) {
                       <Text style={styles.smallButtonText}>Biography</Text>
                     </Pressable>
                     {item.is_deceased ? (
-                      <Pressable
-                        onPress={() => navigation.navigate('GraveRoute', { personId: item.id, personName: personLabel(item) })}
-                        style={styles.smallButton}
-                      >
-                        <Text style={styles.smallButtonText}>Grave</Text>
-                      </Pressable>
+                    <>
+                    <Pressable
+                          onPress={() => navigation.navigate('GraveRoute', { personId: item.id, personName: personLabel(item) })}
+                          style={styles.smallButton}
+                        >
+                          <Text style={styles.smallButtonText}>Grave</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => navigation.navigate('GraveQR', { personId: item.id, personName: personLabel(item) })}
+                          style={styles.smallButton}
+                        >
+                          <Text style={styles.smallButtonText}>QR</Text>
+                        </Pressable>
+                      </>
                     ) : null}
                     <Pressable onPress={() => startEdit(item)} style={styles.smallButton}>
                       <Text style={styles.smallButtonText}>Edit</Text>

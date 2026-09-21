@@ -12,12 +12,16 @@
     "expo": "~57.0.22",
     "expo-image-picker": "~57.0.19",
     "expo-secure-store": "~57.0.4",
+    "expo-sharing": "~57.0.21",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-qrcode-svg": "^6.3.24",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
-    "react-native-url-polyfill": "^4.0.0"
+    "react-native-svg": "15.15.4",
+    "react-native-url-polyfill": "^4.0.0",
+    "react-native-view-shot": "5.1.0"
   },
   "scripts": {
     "start": "expo start",

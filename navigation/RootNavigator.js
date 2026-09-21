@@ -8,6 +8,7 @@ import HomeScreen from '../screens/HomeScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 import BiographyScreen from '../screens/BiographyScreen';
 import GraveRouteScreen from '../screens/GraveRouteScreen';
+import GraveQRScreen from '../screens/GraveQRScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -52,6 +53,7 @@ export default function RootNavigator() {
               component={BiographyScreen}
               options={({ route }) => ({ title: route.params?.personName || 'Biography' })}
             />
+            <Stack.Screen name="GraveQR" component={GraveQRScreen} options={{ title: 'QR code' }} />
             <Stack.Screen
               name="GraveRoute"
               component={GraveRouteScreen}

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In loving memory</title>
+<style>
+  body { margin:0; background:#f6f1e7; color:#2b2622; font-family: Georgia, 'Times New Roman', serif; }
+  main { max-width:520px; margin:0 auto; padding:32px 20px 48px; }
+  .card { background:#fffdf8; border:1px solid #e3d9c6; border-radius:14px; padding:24px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  .dates { color:#8a2c2c; margin:0 0 16px; font-size:18px; }
+  .meta { color:#6b625a; margin:2px 0; }
+  .summary { margin-top:16px; line-height:1.6; white-space:pre-wrap; }
+  .photos img { width:100%; border-radius:10px; margin-top:12px; }
+  .foot { text-align:center; color:#9a8f82; font-size:13px; margin-top:24px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card" id="card">Loading…</div>
+  <p class="foot">Happy Tree Family 🌳</p>
+</main>
+<script>
+const SUPABASE_URL = 'https://rzjmxkeujljtfvowwskd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_MiVpBbtMat_HbK1y1XeeVg_5ObauFrk';
+
+const card = document.getElementById('card');
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+function fmt(d, precision) {
+  if (!d) return '';
+  const p = d.split('-');
+  if (precision === 'year_only') return p[0];
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+function render(d) {
+  const p = d.person || {};
+  const b = d.bio || {};
+  card.textContent = '';
+  card.appendChild(el('h1', '', p.name || p.name_cn || p.name_en || p.name_pinyin || 'In loving memory'));
+  const dates = [fmt(p.birth_date, p.date_precision), fmt(p.death_date, p.date_precision)].filter(Boolean).join(' – ');
+  if (dates) card.appendChild(el('p', 'dates', dates));
+  if (b.occupation) card.appendChild(el('p', 'meta', 'Occupation: ' + b.occupation));
+  if (b.hometown) card.appendChild(el('p', 'meta', 'Hometown: ' + b.hometown));
+  if (d.cemetery_name) card.appendChild(el('p', 'meta', 'Resting place: ' + d.cemetery_name));
+  if (b.summary) card.appendChild(el('p', 'summary', b.summary));
+  (b.photo_urls || []).forEach(function (u) {
+    if (typeof u === 'string' && u.indexOf('https://') === 0) {
+      const box = el('div', 'photos');
+      const img = document.createElement('img');
+      img.src = u; img.alt = '';
+      box.appendChild(img);
+      card.appendChild(box);
+    }
+  });
+}
+async function load() {
+  const q = new URLSearchParams(location.search).get('q');
+  if (!q) { card.textContent = 'No memorial code in this link.'; return; }
+  try {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/get_memorial', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qr: q })
+    });
+    if (!r.ok) throw new Error('bad');
+    const data = await r.json();
+    if (!data) { card.textContent = 'This memorial could not be found.'; return; }
+    render(data);
+  } catch (e) {
+    card.textContent = 'Something went wrong. Please try again.';
+  }
+}
+load();
+</script>
+</body>
+</html>

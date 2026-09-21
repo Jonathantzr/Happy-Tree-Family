@@ -22,6 +22,7 @@ When your free usage resets and you need to start a new conversation, do this:
 3. If you need to see existing code, ask me for ONLY the specific function/lines (tell me what to Ctrl+F and copy) — never ask for a whole file.
 4. Keep replies short: no re-summarising earlier stages. Give a whole stage's steps in ONE message so I only return when something breaks.
 5. Suggest a checkpoint and a fresh chat early, before the limit hits. Attach only this guide + the db schema to new chats.
+6. Every screen Claude writes must follow the "DEVICE COMPATIBILITY & USABILITY RULES" section below, and every stage's test list must include those compatibility checks.
 
 **Important — how to explain things to me:**
 I have some old coding background but I'm rusty and not confident. Please explain everything as if I'm a complete beginner — don't assume I know what a term means just because it sounds common (e.g. explain what "commit," "terminal," "package," "session" mean in context if you use them). Always give exact copy-pasteable commands and exact file locations, not just descriptions of what to do.
@@ -55,11 +56,13 @@ Original target was Malaysian-Chinese, aged 30–60. The owner later said they'd
 
 ### Design style
 Simple, modern, with a touch of traditional — not sterile/generic, not overly ornate either.
+The app must look and feel like a normal, polished app people would happily download (proper navigation, consistent theme, logo slot) — not a functionality-only prototype. Functionality comes first, but the look-and-feel foundation (Stage 4.5) is built BEFORE the family tree; every new screen from Stage 5 onward must use lib/theme.js and the shared components from day one.
 
 ---
 
 ## KEY PRODUCT DECISIONS (the "why" behind the PRD/schema)
 
+- **QR codes are for deceased people only, and only family admins can generate them.** They are shared as a printable image (WhatsApp, email, etc.) so relatives print and laminate them at home before Ching Ming. The memorial page is public, so the database function refuses to show anyone not marked deceased.
 - **No GPS pins for the grave locator — deliberately.** GPS accuracy in dense, informally-laid-out cemeteries can be off by enough meters to mean the wrong row. Instead: a **photo/landmark breadcrumb trail** — e.g. "take Waze/Google Maps to the cemetery → here's which entrance (photo if there's more than one) → park near this landmark (photo) → walk ~100m past this tree → tombstone is here." Photos are **optional, not required**, per step — some families won't want to photograph gravesites, so a pure text description is a fully valid substitute.
 - **QR code on the tombstone** resolves to a bio page: who this person was, their relationship to the viewer (computed, not manually typed each time — see below), dates, a short life summary, photos. Publicly viewable without login (so any relative present can scan it), editable only by logged-in family members.
 - **Relationship-to-viewer labels (e.g. "great-grandmother, dad's side") are computed on the fly** by walking the parent/spousal relationship graph from the viewer to the target person — never hand-typed or stored as a static label.
@@ -88,6 +91,20 @@ Simple, modern, with a touch of traditional — not sterile/generic, not overly 
 - **Master guide edits are given as find-and-replace snippets** (a line to Ctrl+F, then what to replace/insert), never as a full copy of the file — the full file wastes limited chat tokens.
 
 ---
+
+## DEVICE COMPATIBILITY & USABILITY RULES (mandatory for every screen, every stage)
+
+The app must work well on any phone, not just the owner's Android. Found in Stage 4 testing: the last button (Back) was hidden behind Android's navigation buttons. Rules:
+
+- **Safe areas:** every screen keeps its content clear of the status bar, notch, Android navigation buttons/gesture bar and iPhone home indicator. Scrollable screens add bottom padding of at least 40 + the bottom safe-area inset (useSafeAreaInsets from react-native-safe-area-context). Non-scrolling screens use SafeAreaView or the same insets. The LAST button on any screen must always be fully visible and tappable.
+- **Keyboards:** every screen with text fields uses KeyboardAvoidingView (behavior "padding" on iOS, "height" on Android) or an equivalent, inside a ScrollView with keyboardShouldPersistTaps="handled". The focused field AND the submit button must stay visible with the keyboard open, and tapping outside dismisses the keyboard. Set the right keyboardType, autoCapitalize and returnKeyType on each field.
+- **Touch targets:** buttons and tappable rows are at least 48 x 48 dp with spacing between them, so fingers (including older relatives') can hit them.
+- **Text size:** screens must still work when the phone's system font size is set to large. No fixed heights that clip text; long names wrap or truncate cleanly.
+- **Screen sizes:** works on small phones (about 5 inches), tall phones and tablets-in-portrait, with nothing cut off or overlapping. Portrait is the supported orientation.
+- **Light/dark mode:** every text and background colour is set explicitly (via lib/theme.js once it exists), so text never becomes unreadable when the phone is in dark mode.
+- **No dead ends:** every screen has a clear way back, plus loading, empty and error states.
+- **Existing screens** built before this rule get a compatibility pass in Stage 4.5, using a shared Screen wrapper component that handles safe areas and keyboard behaviour in ONE place. New screens use the wrapper from day one.
+- **Test checklist for every stage:** (1) scroll to the bottom of every new screen and confirm the last button is visible; (2) open the keyboard on every form and confirm the field and submit button are visible; (3) set the phone's font size to large and check nothing is cut off; (4) try both Android navigation styles (3 buttons and gestures) if possible; (5) before the real family pilot, repeat on an iPhone and on at least one small-screen Android.
 
 ## DEFERRED / FUTURE PHASES (don't build these yet, but keep in mind for architecture decisions)
 - Phase 2: editable/collaborative family tree, expanded overseas branches, family history documents, offline map caching for cemetery visits.
@@ -131,11 +148,13 @@ These stages match the `find-my-grave-dev-roadmap.md` document. Each one needs C
 - Stage 2 — People & Biographies (add relatives, life summaries, photos)
 - Stage 3 — Grave Route Finder (cemetery routes, landmark steps)
 - Stage 4 — QR Codes (generate + scan to bio page)
-- Stage 5 — Interactive Family Tree (visual tree, QR deep-link)
+- Stage 4.5 — Look & Feel Foundation (theme file, shared components incl. a Screen wrapper handling safe areas + keyboard, logo/icon/splash placeholders, bottom-tab navigation + Settings screen, Person screen replacing crowded cards, translation helper, compatibility pass on older screens)
+- Stage 5 — Interactive Family Tree (visual tree, QR deep-link) — built with the theme + shared components from day one
 - Stage 6 — Generation Name Book (字辈 tracker)
-- Stage 7 — Bilingual Toggle & Polish (English/Chinese switch, visuals)
+- Stage 7 — Bilingual Toggle & Final Polish (English/Chinese switch, restyle + translate older screens, empty/loading states, icons, animations)
 - Stage 8 — Real Family Pilot (using it for real, no new code)
 ### ⚠️ Before Stage 8 (Real Family Pilot) — pre-launch checklist
+- [ ] Choose the PERMANENT memorial web address (own domain ideally) BEFORE printing any QR. Update lib/qrConfig.js and point the domain at the memorial-site page. The Netlify site must be claimed with a Netlify account, or it gets deleted.
 - [ ] Turn **Confirm email** back ON in Supabase (Authentication → Sign In / Providers → User Signups) — it was switched off during Stage 1b for easier testing.
 
 Mark off each stage here as you complete it, so your "resume" message can just say the stage name:
@@ -153,10 +172,11 @@ Mark off each stage here as you complete it, so your "resume" message can just s
   - [X] Stage 2c — Biography view/edit
   - [X] Stage 2d — Photos
 - [X] Stage 3 — Grave Route Finder
-- [ ] Stage 4 — QR Codes
+- [X] Stage 4 — QR Codes
+- [ ] Stage 4.5 — Look & Feel Foundation
 - [ ] Stage 5 — Interactive Family Tree
 - [ ] Stage 6 — Generation Name Book
-- [ ] Stage 7 — Bilingual Toggle & Polish
+- [ ] Stage 7 — Bilingual Toggle & Final Polish
 - [ ] Stage 8 — Real Family Pilot
 
 ---
@@ -174,6 +194,9 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - Stage 2b is built inside `screens/FamilyDetailScreen.js`: person cards with + Parent / + Sibling / + Spouse / + Child (new or existing person), Edit, Delete; one shared form at the bottom; links shown under names (siblings are derived from shared parents); a placeholder "Unknown parent of …" is created when adding a sibling with no parent; the Edit form lets you remove links. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
 - `screens/BiographyScreen.js` — view/edit one person's biography (occupation, hometown, life summary) stored in `biographies` (one row per person, saved with upsert on `person_id`). Reached from the "Biography" button on each person card in `FamilyDetailScreen.js`; registered as `Biography` in `navigation/RootNavigator.js`. Row Level Security policies let only members of that person's family read/insert/update it. Photos: "Add photo" picks an image (expo-image-picker), uploads it to the public Supabase Storage bucket `bio-photos` at `<person_id>/<timestamp>.<ext>`, and stores the public links in `biographies.photo_urls`; long-press a photo to delete. Storage policies let only members of that person's family upload/delete.
 - Uploads use base64 via the base64-arraybuffer package.
-- screens/GraveRouteScreen.js — one grave per person (table graves) plus ordered breadcrumb steps (route_steps, optional photo per step, Up/Down reorder). Reached from the "Grave" button on each person card; registered as GraveRoute in RootNavigator.js. Step photos go in the public Storage bucket route-photos at <grave_id>/<timestamp>.<ext>. Row Level Security limits graves, steps and photo uploads to members of that person's family (public read for the QR scan page is NOT set up yet — that's Stage 4).
+- screens/GraveRouteScreen.js — one grave per person (table graves) plus ordered breadcrumb steps (route_steps, optional photo per step, Up/Down reorder). Reached from the "Grave" button on each person card; registered as GraveRoute in RootNavigator.js. Step photos go in the public Storage bucket route-photos at <grave_id>/<timestamp>.<ext>. Row Level Security limits graves, steps and photo uploads to members of that person's family (public read is done via the Supabase function get_memorial(qr), not by opening these tables).
+- memorial-site/index.html — public memorial page hosted free on Netlify (site claimed under my Netlify account; to update, log in to Netlify, open the site, Deploys tab, drag the folder). It reads one memorial via the Supabase function get_memorial(qr) using the anon key, and only returns people marked deceased.
+- lib/qrConfig.js — holds MEMORIAL_BASE_URL (the Netlify address). QR value = that address + /?q=<graves.qr_code_uuid>.
+- screens/GraveQRScreen.js — registered as GraveQR, reached from the "QR" button on person cards (shown only for deceased people). Deceased-only and family-admin-only. Shows a printable card, shares it as a PNG (react-native-view-shot + expo-sharing), also shares a link, and has in-app tips for making the printed QR last on the grave. Uses useSafeAreaInsets so the Back button isn't hidden by Android buttons. Known gap: there is no "make admin" screen yet, so only the family creator can make QR codes.
 ---
 
