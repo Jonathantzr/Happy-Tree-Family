@@ -2,15 +2,41 @@ import { useState, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { colors } from '../lib/theme';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 import BiographyScreen from '../screens/BiographyScreen';
 import GraveRouteScreen from '../screens/GraveRouteScreen';
 import GraveQRScreen from '../screens/GraveQRScreen';
 
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        headerStyle: { backgroundColor: colors.surface },
+        headerTintColor: colors.text,
+        tabBarIcon: ({ color, size }) => {
+          const iconName = route.name === 'Families' ? 'people' : 'settings';
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="Families" component={HomeScreen} options={{ title: 'Your Families' }} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
+  );
+}
 
 export default function RootNavigator() {
   const [session, setSession] = useState(null);
@@ -35,8 +61,8 @@ export default function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -46,7 +72,7 @@ export default function RootNavigator() {
       <Stack.Navigator>
         {session ? (
           <>
-            <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Your Families' }} />
+            <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
             <Stack.Screen
               name="Biography"

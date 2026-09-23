@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { colors } from '../lib/theme';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I — easy to read aloud
 
@@ -21,6 +24,7 @@ export default function HomeScreen({ navigation }) {
   const [creating, setCreating] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joining, setJoining] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     fetchFamilies();
@@ -237,20 +241,36 @@ export default function HomeScreen({ navigation }) {
       <FlatList
         data={families}
         keyExtractor={(item) => item.families.id}
+        scrollEnabled={false}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.familyRow}
-            onPress={() => navigation.navigate('FamilyDetail', {
-              familyId: item.families.id,
-              familyName: item.families.name,
-            })}
-          >
-            <View>
-              <Text style={styles.familyName}>{item.families.name}</Text>
-              <Text style={styles.familyCode}>Join code: {item.families.join_code}</Text>
-            </View>
-            <Text style={styles.familyRole}>{item.role}</Text>
-          </Pressable>
+          <View style={styles.familyRow}>
+            <Pressable
+              style={{ flex: 1 }}
+              onPress={() => navigation.navigate('FamilyDetail', {
+                familyId: item.families.id,
+                familyName: item.families.name,
+              })}
+            >
+              <View style={styles.familyRowTop}>
+                <Text style={styles.familyName} numberOfLines={1}>{item.families.name}</Text>
+                <Text style={styles.familyRole}>{item.role}</Text>
+              </View>
+              <Text style={styles.familyCode} numberOfLines={1}>Join code: {item.families.join_code}</Text>
+            </Pressable>
+            <Pressable
+              onPress={async () => {
+                await Clipboard.setStringAsync(item.families.join_code);
+                setCopiedId(item.families.id);
+                setTimeout(() => setCopiedId((current) => (current === item.families.id ? null : current)), 1500);
+              }}
+              hitSlop={8}
+              style={{ padding: 8 }}
+            >
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>
+                {copiedId === item.families.id ? 'Copied' : 'Copy'}
+              </Text>
+            </Pressable>
+          </View>
         )}
         ListEmptyComponent={<Text style={styles.emptyText}>You haven't created or joined a family yet.</Text>}
         style={styles.list}
@@ -301,14 +321,15 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
+  container: { flex: 1, padding: 20 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   heading: { fontSize: 22, fontWeight: 'bold', marginBottom: 12 },
-  list: { maxHeight: 200, marginBottom: 20 },
-  familyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  familyName: { fontSize: 16 },
+  list: { marginBottom: 20 },
+  familyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  familyRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  familyName: { fontSize: 16, flexShrink: 1, marginRight: 8 },
   familyCode: { fontSize: 12, color: '#888', marginTop: 2 },
-  familyRole: { fontSize: 14, color: '#888' },
+  familyRole: { fontSize: 14, color: '#888', flexShrink: 0 },
   emptyText: { color: '#888', fontStyle: 'italic' },
   form: { marginBottom: 30 },
   formHeading: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
