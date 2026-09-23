@@ -174,6 +174,12 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - [X] Stage 3 — Grave Route Finder
 - [X] Stage 4 — QR Codes
 - [ ] Stage 4.5 — Look & Feel Foundation
+    - [X] Stage 4.5a — Theme file (lib/theme.js) + shared Screen wrapper (components/Screen.js)
+    - [X] Stage 4.5b — Translation helper plumbing (lib/i18n.js) — full bilingual toggle still deferred to Stage 7
+    - [X] Stage 4.5c — Logo/icon/splash placeholders
+    - [X] Stage 4.5d — Bottom-tab navigation (Families/Settings) + Settings screen
+    - [ ] Stage 4.5e — Person screen (replacing crowded person cards)
+    - [ ] Stage 4.5f — Compatibility pass on remaining older screens
 - [ ] Stage 5 — Interactive Family Tree
 - [ ] Stage 6 — Generation Name Book
 - [ ] Stage 7 — Bilingual Toggle & Final Polish
@@ -185,9 +191,15 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 
 - `lib/supabase.js` — Supabase client, reads keys from `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`). Uses AsyncStorage for session persistence.
 `formatISOToDisplay`, `isoToDate`), the date-range text under a name (`formatPersonMeta`), and a Yes/No popup (`askYesNo`).
-- `navigation/RootNavigator.js` — switches between Welcome (logged out) and Home/FamilyDetail (logged in) screens automatically based on Supabase auth session.
+- `lib/theme.js` — shared style rulebook (colors, spacing, radius, fontSize, fontWeight, touchTarget) — jade green (#2F5D4E) + warm gold accent palette. New/updated screens should pull colors from here instead of hard-coding them.
+- `components/Screen.js` — shared screen wrapper (Stage 4.5a): handles safe-area insets (notch/status bar/Android nav buttons) and keyboard behavior via `scroll`/`keyboardAvoiding` props. Older screens don't use it yet — that's Stage 4.5f (compatibility pass), still pending for WelcomeScreen.js, BiographyScreen.js, GraveRouteScreen.js, GraveQRScreen.js.
+- `lib/i18n.js` — translation helper plumbing (Stage 4.5b): `LanguageProvider` + `useTranslation()` hook with a small EN/ZH string dictionary. App always shows English for now — screens don't call `t()` yet; the full bilingual pass is Stage 7.
+- `App.js` — wraps `RootNavigator` in `SafeAreaProvider` (react-native-safe-area-context) and `LanguageProvider` (lib/i18n.js).
+- `app.json` — icon/splash/Android adaptive-icon assets replaced with jade-tree placeholders (Stage 4.5c); `expo-splash-screen` plugin configured pointing at `assets/splash.png`.
+- `navigation/RootNavigator.js` — switches between Welcome (logged out) and a logged-in area based on Supabase auth session. Logged-in area is now a bottom-tab navigator (`MainTabs`, Stage 4.5d) with "Families" (HomeScreen) and "Settings" (SettingsScreen) tabs, nested inside the top-level stack alongside FamilyDetail/Biography/GraveQR/GraveRoute (so those still push forward from either tab). Uses `@react-navigation/bottom-tabs` + `@expo/vector-icons`.
+- `screens/SettingsScreen.js` — Settings tab (Stage 4.5d): language toggle (EN/中文 buttons via `lib/i18n.js`, cosmetic only until Stage 7) and a Log out button (`supabase.auth.signOut()`).
 - `screens/WelcomeScreen.js` — email/password sign up + login form.
-- `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family or join one by code, and tapping a family navigates to `FamilyDetailScreen`. Uses `families.join_code` in Supabase.
+- `screens/HomeScreen.js` — shows the logged-in user's families (name + role), lets the user create a new family or join one by code, and tapping a family navigates to `FamilyDetailScreen`. Uses `families.join_code` in Supabase. Each family row has a "Copy" button (expo-clipboard) that copies the join code and shows "Copied" briefly (tracked per-family via `copiedId` state) instead of a popup, plus a two-line row layout (name+role, then join code+copy button) to stop content overflowing off-screen. Note: if changes here don't seem to apply after a restart, test via local WiFi (`npx expo start -c`, no `--tunnel`) first — ngrok tunnels were found to occasionally serve a stale cached bundle.
 - `screens/FamilyDetailScreen.js` — shows the list of people in a family (from `persons`, filtered by `family_id`), each showing a birth/death date range under their name (falls back to "Deceased" only if no date is known, or shows nothing if there's no info at all). Form below adds a new person: single free-text Name field (auto-capitalizes), gender, living/deceased toggle, and a native tap-to-pick date for birth/death, allowing dates back to year 1500 (stored as YYYY-MM-DD, shown as DD/MM/YYYY). Stage 2b is built here too: each person card has + Parent / + Sibling / + Spouse / + Child (add a new person or link one already added), Edit, and Delete. One shared form at the bottom handles add/edit/link modes. Links show under each name (Parents, Siblings, Spouse, Children — siblings are derived from shared parents, not stored). + Sibling on someone with no parent creates an "Unknown parent of …" placeholder. Linking a parent who has a spouse asks whether the spouse is also a parent. Links can be removed from the Edit form. Only 'parent' and 'spouse' rows are stored in `person_relationships`.
 - Note: this project requires `npx expo start --tunnel` every time (details in `master-guide-archive.md`).
 - `lib/personHelpers.js` — small helper functions for the people screen: date formatting (`formatDateDisplay`, `toISODate`, `formatISOToDisplay`, `isoToDate`), the date-range text under a name (`formatPersonMeta`), and a Yes/No popup (`askYesNo`).
