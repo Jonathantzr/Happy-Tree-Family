@@ -24,6 +24,29 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [formMode, setFormMode] = useState(null);
   const [pickExisting, setPickExisting] = useState(true);
   const [kbHeight, setKbHeight] = useState(0);
+    useEffect(() => {
+    if (!route.params) return;
+    const { openEdit, openRelative, openDelete } = route.params;
+    if (!openEdit && !openRelative && !openDelete) return;
+    if (people.length === 0) return; // wait for the list to load first
+
+    if (openEdit) {
+      const p = people.find((x) => x.id === openEdit);
+      if (p) startEdit(p);
+    } else if (openRelative) {
+      const p = people.find((x) => x.id === openRelative.personId);
+      if (p) startRelative(openRelative.kind, p);
+    } else if (openDelete) {
+      const p = people.find((x) => x.id === openDelete);
+      if (p) confirmDelete(p);
+    }
+
+    navigation.setParams({ openEdit: undefined, openRelative: undefined, openDelete: undefined });
+
+    if (openEdit || openRelative) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
+    }
+  }, [route.params, people]);
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (e) => setKbHeight(e.endCoordinates.height));
     const hide = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
@@ -376,58 +399,32 @@ export default function FamilyDetailScreen({ route, navigation }) {
               <Text style={styles.emptyText}>No one added yet — add the first person below.</Text>
             ) : (
               people.map((item) => (
-                <View key={item.id} style={styles.personRow}>
-                  <Text style={styles.personName}>{personLabel(item)}</Text>
-                  {formatPersonMeta(item) ? (
-                    <Text style={styles.personMeta}>{formatPersonMeta(item)}</Text>
-                  ) : null}
-                  {relationSummary(item.id) ? (
-                    <Text style={styles.personLinks}>{relationSummary(item.id)}</Text>
-                  ) : null}
-
-                  <View style={styles.actionRow}>
-                    {['parent', 'sibling', 'spouse', 'child'].map((k) => (
-                      <Pressable
-                        key={k}
-                        onPress={() => startRelative(k, item)}
-                        style={styles.smallButton}
-                      >
-                        <Text style={styles.smallButtonText}>+ {k.charAt(0).toUpperCase() + k.slice(1)}</Text>
-                      </Pressable>
-                    ))}
+                <Pressable
+                  key={item.id}
+                  style={styles.personRow}
+                  onPress={() =>
+                    navigation.navigate('Person', {
+                      familyId,
+                      familyName,
+                      personId: item.id,
+                      personName: personLabel(item),
+                    })
+                  }
+                >
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarInitial}>
+                      {personLabel(item).trim().charAt(0).toUpperCase() || '?'}
+                    </Text>
                   </View>
-
-                  <View style={styles.actionRow}>
-                    <Pressable
-                      onPress={() => navigation.navigate('Biography', { personId: item.id, personName: personLabel(item) })}
-                      style={styles.smallButton}
-                    >
-                      <Text style={styles.smallButtonText}>Biography</Text>
-                    </Pressable>
-                    {item.is_deceased ? (
-                    <>
-                    <Pressable
-                          onPress={() => navigation.navigate('GraveRoute', { personId: item.id, personName: personLabel(item) })}
-                          style={styles.smallButton}
-                        >
-                          <Text style={styles.smallButtonText}>Grave</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => navigation.navigate('GraveQR', { personId: item.id, personName: personLabel(item) })}
-                          style={styles.smallButton}
-                        >
-                          <Text style={styles.smallButtonText}>QR</Text>
-                        </Pressable>
-                      </>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.personName}>{personLabel(item)}</Text>
+                    {formatPersonMeta(item) ? (
+                      <Text style={styles.personMeta}>{formatPersonMeta(item)}</Text>
                     ) : null}
-                    <Pressable onPress={() => startEdit(item)} style={styles.smallButton}>
-                      <Text style={styles.smallButtonText}>Edit</Text>
-                    </Pressable>
-                    <Pressable onPress={() => confirmDelete(item)} style={[styles.smallButton, styles.deleteButton]}>
-                      <Text style={styles.deleteText}>Delete</Text>
-                    </Pressable>
+                    {item.is_deceased ? <Text style={styles.memoryTag}>In memory</Text> : null}
                   </View>
-                </View>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
               ))
             )}
           </View>
@@ -585,11 +582,15 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 40 },
   list: { marginBottom: 10 },
-  personRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#C9A24B', alignItems: 'center', justifyContent: 'center' },
+  avatarInitial: { color: '#fff', fontWeight: '700', fontSize: 18 },
+  memoryTag: { color: '#2F5D4E', fontSize: 11, fontStyle: 'italic', marginTop: 2 },
+  chevron: { color: '#999', fontSize: 20 },
   personName: { fontSize: 16 },
   personMeta: { fontSize: 12, color: '#888', marginTop: 2 },
   emptyText: { color: '#888', fontStyle: 'italic' },
-  form: { marginTop: 10 },
+  form: { marginTop: 10, borderTopWidth: 1, borderTopColor: '#ddd', paddingTop: 16 },
   formHeading: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, marginBottom: 10, justifyContent: 'center', minHeight: 44 },
   dateText: { color: '#000' },

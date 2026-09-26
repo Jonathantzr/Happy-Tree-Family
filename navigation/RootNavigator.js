@@ -10,6 +10,7 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
+import PersonScreen from '../screens/PersonScreen';
 import BiographyScreen from '../screens/BiographyScreen';
 import GraveRouteScreen from '../screens/GraveRouteScreen';
 import GraveQRScreen from '../screens/GraveQRScreen';
@@ -74,6 +75,11 @@ export default function RootNavigator() {
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
+            <Stack.Screen
+              name="Person"
+              component={PersonScreen}
+              options={({ route }) => ({ title: route.params?.personName || 'Person' })}
+            />
             <Stack.Screen
               name="Biography"
               component={BiographyScreen}
