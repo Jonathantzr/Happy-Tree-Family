@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
-import {
-  View, Text, TextInput, Pressable, ScrollView, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Alert, StyleSheet, Image,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, Pressable, ActivityIndicator, Alert, StyleSheet, Image, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
+import Screen from '../components/Screen';
+import AppButton from '../components/AppButton';
+import TextField from '../components/TextField';
+import EmptyState from '../components/EmptyState';
 
 export default function BiographyScreen({ route }) {
   const { personId, personName } = route.params;
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -18,6 +22,7 @@ export default function BiographyScreen({ route }) {
   const [occupation, setOccupation] = useState('');
   const [hometown, setHometown] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState(null); // the photo shown full-screen, or null
 
   useEffect(() => {
     loadBio();
@@ -67,7 +72,7 @@ export default function BiographyScreen({ route }) {
     setEditing(false);
   }
 
-    const photos = bio?.photo_urls || [];
+  const photos = bio?.photo_urls || [];
 
   // saves the list of photo links into the biography (creates the biography row if needed)
   async function savePhotoList(newList) {
@@ -133,7 +138,7 @@ export default function BiographyScreen({ route }) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -141,135 +146,174 @@ export default function BiographyScreen({ route }) {
   const hasContent = bio && (bio.summary || bio.occupation || bio.hometown);
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.name}>{personName}</Text>
-
-          {editing ? (
+    <Screen>
+      <Text style={styles.sectionHeading}>Their story</Text>
+      {editing ? (
+        <View style={styles.card}>
+          <TextField
+            label="Occupation"
+            value={occupation}
+            onChangeText={setOccupation}
+            placeholder="e.g. Rubber tapper, teacher"
+            autoCapitalize="sentences"
+            returnKeyType="next"
+          />
+          <TextField
+            label="Hometown"
+            value={hometown}
+            onChangeText={setHometown}
+            placeholder="e.g. Segamat, Johor"
+            autoCapitalize="words"
+            returnKeyType="next"
+          />
+          <TextField
+            label="Life summary"
+            value={summary}
+            onChangeText={setSummary}
+            placeholder={`A few lines about who ${personName || 'this person'} was...`}
+            multiline
+          />
+          <AppButton title="Save" onPress={save} loading={saving} />
+          <AppButton title="Cancel" variant="ghost" onPress={() => setEditing(false)} disabled={saving} style={{ marginTop: spacing.xs }} />
+        </View>
+      ) : (
+        <View style={styles.card}>
+          {hasContent ? (
             <View>
-              <Text style={styles.label}>Occupation</Text>
-              <TextInput
-                style={styles.input}
-                value={occupation}
-                onChangeText={setOccupation}
-                placeholder="e.g. Rubber tapper, teacher"
-              />
-
-              <Text style={styles.label}>Hometown</Text>
-              <TextInput
-                style={styles.input}
-                value={hometown}
-                onChangeText={setHometown}
-                placeholder="e.g. Segamat, Johor"
-              />
-
-              <Text style={styles.label}>Life summary</Text>
-              <TextInput
-                style={[styles.input, styles.multiline]}
-                value={summary}
-                onChangeText={setSummary}
-                placeholder="A few lines about who this person was..."
-                multiline
-                textAlignVertical="top"
-              />
-
-              <Pressable onPress={save} disabled={saving} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>{saving ? 'Saving...' : 'Save'}</Text>
-              </Pressable>
-              <Pressable onPress={() => setEditing(false)} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
+              {bio.occupation ? (
+                <View style={styles.block}>
+                  <Text style={styles.label}>Occupation</Text>
+                  <Text style={styles.value}>{bio.occupation}</Text>
+                </View>
+              ) : null}
+              {bio.hometown ? (
+                <View style={styles.block}>
+                  <Text style={styles.label}>Hometown</Text>
+                  <Text style={styles.value}>{bio.hometown}</Text>
+                </View>
+              ) : null}
+              {bio.summary ? (
+                <View style={styles.block}>
+                  <Text style={styles.label}>Life summary</Text>
+                  <Text style={styles.value}>{bio.summary}</Text>
+                </View>
+              ) : null}
             </View>
           ) : (
-            <View>
-              {hasContent ? (
-                <View>
-                  {bio.occupation ? (
-                    <View style={styles.block}>
-                      <Text style={styles.label}>Occupation</Text>
-                      <Text style={styles.value}>{bio.occupation}</Text>
-                    </View>
-                  ) : null}
-                  {bio.hometown ? (
-                    <View style={styles.block}>
-                      <Text style={styles.label}>Hometown</Text>
-                      <Text style={styles.value}>{bio.hometown}</Text>
-                    </View>
-                  ) : null}
-                  {bio.summary ? (
-                    <View style={styles.block}>
-                      <Text style={styles.label}>Life summary</Text>
-                      <Text style={styles.value}>{bio.summary}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : (
-                <Text style={styles.emptyText}>
-                  No biography yet. Tap the button below to write one.
-                </Text>
-              )}
-
-              <Pressable onPress={startEditing} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>
-                  {hasContent ? 'Edit biography' : 'Write biography'}
-                </Text>
-              </Pressable>
-            </View>
+            <EmptyState
+              icon="book-outline"
+              title="No story written yet"
+              message="A few lines about who they were is plenty to start with."
+            />
           )}
-          <View style={styles.photoSection}>
-            <Text style={styles.label}>Photos</Text>
-            {photos.length === 0 ? (
-              <Text style={styles.emptyText}>No photos yet.</Text>
-            ) : (
-              <View style={styles.photoGrid}>
-                {photos.map((url) => (
-                  <Pressable key={url} onLongPress={() => confirmDeletePhoto(url)} style={styles.photoBox}>
-                    <Image source={{ uri: url }} style={styles.photo} />
-                  </Pressable>
-                ))}
+          <AppButton
+            title={hasContent ? 'Edit story' : 'Write their story'}
+            variant={hasContent ? 'secondary' : 'primary'}
+            icon="create-outline"
+            onPress={startEditing}
+          />
+        </View>
+      )}
+
+      <Text style={styles.sectionHeading}>Photos</Text>
+      <View style={styles.card}>
+        {photos.length === 0 ? (
+          <Text style={styles.emptyText}>No photos yet.</Text>
+        ) : (
+          <View style={styles.photoGrid}>
+            {photos.map((url) => (
+              <View key={url} style={styles.photoBox}>
+                <Pressable
+                  style={{ flex: 1 }}
+                  onPress={() => setViewingPhoto(url)}
+                  onLongPress={() => confirmDeletePhoto(url)}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel="View photo"
+                >
+                  <Image source={{ uri: url }} style={styles.photo} />
+                </Pressable>
+                <Pressable
+                  style={styles.photoDelete}
+                  onPress={() => confirmDeletePhoto(url)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete photo"
+                >
+                  <Ionicons name="trash-outline" size={16} color={colors.textOnPrimary} />
+                </Pressable>
               </View>
-            )}
-            {photos.length > 0 ? (
-              <Text style={styles.hint}>Long-press a photo to delete it.</Text>
-            ) : null}
-            <Pressable onPress={addPhoto} disabled={uploading} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>{uploading ? 'Uploading...' : 'Add photo'}</Text>
-            </Pressable>
+            ))}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        )}
+        <AppButton
+          title="Add a photo"
+          variant="secondary"
+          icon="image-outline"
+          onPress={addPhoto}
+          loading={uploading}
+          style={{ marginTop: spacing.md }}
+        />
+      </View>
+
+      <Modal
+        visible={!!viewingPhoto}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <Pressable style={styles.viewer} onPress={() => setViewingPhoto(null)}>
+          {viewingPhoto ? <Image source={{ uri: viewingPhoto }} style={styles.viewerImage} resizeMode="contain" /> : null}
+          <View style={[styles.viewerClose, { top: insets.top + spacing.sm }]}>
+            <Ionicons name="close" size={24} color={colors.textOnPrimary} />
+          </View>
+        </Pressable>
+      </Modal>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 20, paddingBottom: 60 },
-  name: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  block: { marginBottom: 18 },
-  label: { fontSize: 13, color: '#666', marginBottom: 6, marginTop: 6 },
-  value: { fontSize: 16, lineHeight: 22 },
-  emptyText: { fontSize: 16, color: '#666', marginBottom: 20 },
-  input: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-    padding: 12, fontSize: 16, marginBottom: 10,
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginBottom: spacing.sm },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    ...shadow.card,
   },
-  multiline: { minHeight: 140 },
-  primaryButton: {
-    backgroundColor: '#2e7d32', padding: 14, borderRadius: 8,
-    alignItems: 'center', marginTop: 14,
-  },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  secondaryButton: { padding: 14, alignItems: 'center', marginTop: 6 },
-  secondaryButtonText: { color: '#555', fontSize: 16 },
-  photoSection: { marginTop: 28 },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  block: { marginBottom: spacing.md },
+  label: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.xs },
+  value: { color: colors.text, fontSize: fontSize.md, lineHeight: 24 },
+  emptyText: { color: colors.textMuted, fontSize: fontSize.sm },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   photoBox: { width: '48%', aspectRatio: 1 },
-  photo: { width: '100%', height: '100%', borderRadius: 8, backgroundColor: '#eee' },
-  hint: { fontSize: 12, color: '#888', marginTop: 8 },
+  photo: { width: '100%', height: '100%', borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  photoDelete: {
+    position: 'absolute',
+    top: spacing.xs + 2,
+    right: spacing.xs + 2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '100%' },
+  viewerClose: {
+    position: 'absolute',
+    right: spacing.md,
+    width: touchTarget,
+    height: touchTarget,
+    borderRadius: touchTarget / 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

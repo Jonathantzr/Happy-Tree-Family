@@ -1,9 +1,12 @@
 import { useState, useCallback } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Alert, StyleSheet, Modal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { colors, spacing, radius, fontSize, fontWeight, touchTarget } from '../lib/theme';
+import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
 import Screen from '../components/Screen';
+import Avatar from '../components/Avatar';
 import { formatPersonMeta } from '../lib/personHelpers';
 
 function personLabel(p) {
@@ -21,10 +24,9 @@ export default function PersonScreen({ route, navigation }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [selfPersonId, setSelfPersonId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const loadEverything = useCallback(async () => {
-    setLoading(true);
-
     const { data: peopleData, error: peopleErr } = await supabase
       .from('persons')
       .select('*')
@@ -47,6 +49,8 @@ export default function PersonScreen({ route, navigation }) {
       } else {
         setRelationships(relData || []);
       }
+    } else {
+      setRelationships([]);
     }
 
     const { data: graveData } = await supabase
@@ -217,135 +221,183 @@ export default function PersonScreen({ route, navigation }) {
     navigation.navigate('FamilyDetail', { familyId, familyName, openEdit: person.id });
   }
 
+  const goTo = (screen) => navigation.navigate(screen, { personId: person.id, personName: personLabel(person) });
+
+  const tiles = [{ key: 'story', label: 'Story', icon: 'book-outline', onPress: () => goTo('Biography') }];
+  if (canShowGraveActions && !grave) {
+    tiles.push({ key: 'directions', label: 'Add directions', icon: 'map-outline', onPress: () => goTo('GraveRoute') });
+  }
+  if (canShowQR) {
+    tiles.push({ key: 'qr', label: 'QR code', icon: 'qr-code-outline', onPress: () => goTo('GraveQR') });
+  }
+
   return (
     <Screen>
       <View style={styles.banner}>
-        <Pressable style={styles.menuButton} onPress={() => setMenuOpen(true)}>
-          <Text style={styles.menuDots}>⋯</Text>
+        <Pressable
+          style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}
+          onPress={() => setMenuOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
+        >
+          <Ionicons name="ellipsis-horizontal" size={22} color={colors.textOnPrimary} />
         </Pressable>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarInitial}>{personLabel(person).trim().charAt(0).toUpperCase() || '?'}</Text>
-        </View>
+        <Avatar name={personLabel(person)} size={76} />
         <Text style={styles.name}>{personLabel(person)}</Text>
         {formatPersonMeta(person) ? <Text style={styles.datePill}>{formatPersonMeta(person)}</Text> : null}
         {person.is_deceased ? <Text style={styles.memoryTag}>In memory</Text> : null}
         {relationToViewer ? (
           <View style={styles.relationPill}>
-            <Text style={styles.relationPillText}>{relationToViewer} (relative to you)</Text>
+            <Text style={styles.relationPillText}>Your {relationToViewer.toLowerCase()}</Text>
           </View>
         ) : null}
       </View>
 
       <View style={styles.tileRow}>
-        <Pressable
-          style={styles.tile}
-          onPress={() => navigation.navigate('Biography', { personId: person.id, personName: personLabel(person) })}
-        >
-          <Text style={styles.tileText}>Story</Text>
-        </Pressable>
-        {canShowGraveActions && !grave ? (
+        {tiles.map((tile) => (
           <Pressable
-            style={styles.tile}
-            onPress={() => navigation.navigate('GraveRoute', { personId: person.id, personName: personLabel(person) })}
+            key={tile.key}
+            style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
+            onPress={tile.onPress}
+            accessibilityRole="button"
           >
-            <Text style={styles.tileText}>Directions</Text>
+            <Ionicons name={tile.icon} size={22} color={colors.primary} />
+            <Text style={styles.tileText}>{tile.label}</Text>
           </Pressable>
-        ) : null}
-        {canShowQR ? (
-          <Pressable
-            style={styles.tile}
-            onPress={() => navigation.navigate('GraveQR', { personId: person.id, personName: personLabel(person) })}
-          >
-            <Text style={styles.tileText}>QR</Text>
-          </Pressable>
-        ) : null}
+        ))}
       </View>
 
       {grave ? (
         <Pressable
-          style={styles.graveCard}
-          onPress={() => navigation.navigate('GraveRoute', { personId: person.id, personName: personLabel(person) })}
+          style={({ pressed }) => [styles.graveCard, pressed && styles.pressed]}
+          onPress={() => goTo('GraveRoute')}
+          accessibilityRole="button"
         >
-          <Text style={styles.graveCardLabel}>Directions to the grave</Text>          
-          <Text style={styles.graveCemetery}>{grave.cemetery_name}</Text>
-          <Text style={styles.graveSteps}>
-            {stepCount} step{stepCount === 1 ? '' : 's'} from the gate
-          </Text>
+          <View style={styles.graveIcon}>
+            <Ionicons name="map-outline" size={20} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.graveCardLabel}>Directions to the grave</Text>
+            <Text style={styles.graveCemetery}>{grave.cemetery_name}</Text>
+            <Text style={styles.graveSteps}>
+              {stepCount === 0 ? 'No steps added yet' : `${stepCount} step${stepCount === 1 ? '' : 's'} from the gate`}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </Pressable>
       ) : null}
 
       <Text style={styles.sectionHeading}>Family</Text>
       {relatives.length === 0 ? (
-        <Text style={styles.emptyText}>No relatives linked yet.</Text>
+        <Text style={styles.emptyText}>No relatives linked yet — add one below.</Text>
       ) : (
-        relatives.map(({ person: rp, label }) => (
-          <Pressable
-            key={rp.id}
-            style={styles.relativeRow}
-            onPress={() => navigation.push('Person', { familyId, familyName, personId: rp.id, personName: personLabel(rp) })}
-          >
-            <Text style={styles.relativeName}>{personLabel(rp)}</Text>
-            <Text style={styles.relativeLabel}>{label}</Text>
-          </Pressable>
-        ))
+        <View style={styles.listCard}>
+          {relatives.map(({ person: rp, label }, index) => (
+            <Pressable
+              key={rp.id}
+              style={({ pressed }) => [styles.relativeRow, index > 0 && styles.rowDivider, pressed && styles.pressed]}
+              onPress={() => navigation.push('Person', { familyId, familyName, personId: rp.id, personName: personLabel(rp) })}
+              accessibilityRole="button"
+            >
+              <Avatar name={personLabel(rp)} size={36} />
+              <Text style={styles.relativeName}>{personLabel(rp)}</Text>
+              <Text style={styles.relativeLabel}>{label}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </Pressable>
+          ))}
+        </View>
       )}
 
       <Text style={styles.sectionHeading}>Add a relative</Text>
       <View style={styles.chipRow}>
         {['parent', 'sibling', 'spouse', 'child'].map((k) => (
-          <Pressable key={k} style={styles.chip} onPress={() => goAddRelative(k)}>
-            <Text style={styles.chipText}>+ {k.charAt(0).toUpperCase() + k.slice(1)}</Text>
+          <Pressable
+            key={k}
+            style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+            onPress={() => goAddRelative(k)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={18} color={colors.primary} />
+            <Text style={styles.chipText}>{k.charAt(0).toUpperCase() + k.slice(1)}</Text>
           </Pressable>
         ))}
       </View>
 
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => setMenuOpen(false)}
+      >
         <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
-          <View style={styles.menuBox}>
-            <Pressable style={styles.menuItem} onPress={goEdit}>
-              <Text style={styles.menuItemText}>Edit</Text>
+          <Pressable style={[styles.menuSheet, { paddingBottom: insets.bottom + spacing.sm }]} onPress={() => {}}>
+            <Text style={styles.menuTitle} numberOfLines={1}>{personLabel(person)}</Text>
+            <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goEdit}>
+              <Ionicons name="create-outline" size={20} color={colors.text} />
+              <Text style={styles.menuItemText}>Edit details</Text>
             </Pressable>
-            <Pressable style={styles.menuItem} onPress={handleDelete}>
-              <Text style={[styles.menuItemText, styles.menuItemDanger]}>Delete</Text>
+            <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={20} color={colors.danger} />
+              <Text style={[styles.menuItemText, styles.menuItemDanger]}>Delete this person</Text>
             </Pressable>
-          </View>
+            <Pressable
+              style={({ pressed }) => [styles.menuItem, styles.menuCancel, pressed && styles.pressed]}
+              onPress={() => setMenuOpen(false)}
+            >
+              <Text style={styles.menuCancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
         </Pressable>
       </Modal>
     </Screen>
   );
 }
 
+const card = {
+  backgroundColor: colors.surface,
+  borderRadius: radius.md,
+  borderWidth: 1,
+  borderColor: colors.border,
+  ...shadow.card,
+};
+
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  pressed: { opacity: 0.6 },
   errorText: { color: colors.textMuted, fontSize: fontSize.md, marginTop: spacing.lg, textAlign: 'center' },
-  banner: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', marginTop: spacing.sm },
-  menuButton: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
-  menuDots: { color: colors.textOnPrimary, fontSize: fontSize.xl, fontWeight: fontWeight.bold },
-  avatarCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-  avatarInitial: { color: colors.textOnPrimary, fontSize: fontSize.xxl, fontWeight: fontWeight.bold },
-  name: { color: colors.textOnPrimary, fontSize: fontSize.xl, fontWeight: fontWeight.bold, textAlign: 'center' },
+  banner: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center' },
+  menuButton: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
+  name: { color: colors.textOnPrimary, fontSize: fontSize.xl, fontWeight: fontWeight.bold, textAlign: 'center', marginTop: spacing.sm },
   datePill: { color: colors.textOnPrimary, fontSize: fontSize.sm, marginTop: spacing.xs },
   memoryTag: { color: colors.textOnPrimary, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
   relationPill: { backgroundColor: colors.accent, borderRadius: radius.pill, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm },
   relationPillText: { color: colors.primaryDark, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   tileRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  tile: { flex: 1, minHeight: touchTarget, backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  tileText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  graveCard: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginTop: spacing.md },
-  graveCardLabel: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.xs },
+  tile: { ...card, flex: 1, minHeight: 72, paddingVertical: spacing.sm + 4, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  tileText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium, textAlign: 'center' },
+  graveCard: { ...card, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, marginTop: spacing.md },
+  graveIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  graveCardLabel: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: 2 },
   graveCemetery: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
-  graveSteps: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: spacing.xs },
+  graveSteps: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
   sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.lg, marginBottom: spacing.sm },
-  emptyText: { color: colors.textMuted, fontStyle: 'italic' },
-  relativeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: touchTarget, borderBottomWidth: 1, borderBottomColor: colors.border },
-  relativeName: { color: colors.text, fontSize: fontSize.md },
+  emptyText: { color: colors.textMuted, fontSize: fontSize.sm },
+  listCard: { ...card },
+  relativeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 4, minHeight: 56, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  rowDivider: { borderTopWidth: 1, borderTopColor: colors.surfaceAlt },
+  relativeName: { flex: 1, color: colors.text, fontSize: fontSize.md },
   relativeLabel: { color: colors.textMuted, fontSize: fontSize.sm },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: { minHeight: touchTarget, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: touchTarget, paddingLeft: spacing.sm + 4, paddingRight: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.surface },
   chipText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  menuOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-start', alignItems: 'flex-end' },
-  menuBox: { marginTop: 60, marginRight: spacing.md, backgroundColor: colors.surface, borderRadius: radius.md, overflow: 'hidden', minWidth: 140 },
-  menuItem: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, minHeight: touchTarget, justifyContent: 'center' },
+  menuOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  menuSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: spacing.md, paddingHorizontal: spacing.md },
+  menuTitle: { color: colors.textMuted, fontSize: fontSize.sm, textAlign: 'center', marginBottom: spacing.sm },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.sm },
   menuItemText: { color: colors.text, fontSize: fontSize.md },
   menuItemDanger: { color: colors.danger },
+  menuCancel: { justifyContent: 'center', borderTopWidth: 1, borderTopColor: colors.surfaceAlt, marginTop: spacing.xs },
+  menuCancelText: { color: colors.textMuted, fontSize: fontSize.md, fontWeight: fontWeight.medium },
 });

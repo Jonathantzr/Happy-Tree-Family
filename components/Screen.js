@@ -5,10 +5,12 @@
 // - a consistent background color
 // Use this once per screen instead of copy-pasting this logic everywhere.
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { View, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../lib/theme';
+import { HeaderHeightContext } from '@react-navigation/elements';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
+import { colors, spacing } from '../lib/theme';
 
 export default function Screen({
   children,
@@ -17,22 +19,34 @@ export default function Screen({
   backgroundColor = colors.background,
   contentContainerStyle,
   style,
+  safeTop = false, // only for screens with NO title bar — the title bar already clears the status bar
+  scrollRef, // lets a screen scroll itself (e.g. down to a form)
+  overlay, // anything that floats above the content, like a round + button
+  refreshControl,
 }) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useContext(HeaderHeightContext) || 0;
+
+  // Screens inside the bottom tabs sit above the tab bar, which already clears
+  // the Android nav buttons / iPhone home indicator — don't add that space twice.
+  const inTabs = useContext(BottomTabBarHeightContext) !== undefined;
+  const bottomInset = inTabs ? 0 : insets.bottom;
 
   const inner = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={[
-        { paddingBottom: 40 + insets.bottom, paddingHorizontal: 16 },
+        { paddingTop: spacing.md, paddingBottom: 40 + bottomInset, paddingHorizontal: spacing.md },
         contentContainerStyle,
       ]}
       keyboardShouldPersistTaps="handled"
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={[{ flex: 1, paddingHorizontal: 16, paddingBottom: insets.bottom }, contentContainerStyle]}>
+    <View style={[{ flex: 1, paddingHorizontal: spacing.md, paddingBottom: bottomInset }, contentContainerStyle]}>
       {children}
     </View>
   );
@@ -41,15 +55,20 @@ export default function Screen({
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       {inner}
+      {overlay}
     </KeyboardAvoidingView>
   ) : (
-    inner
+    <>
+      {inner}
+      {overlay}
+    </>
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, backgroundColor }, style]}>
+    <View style={[styles.root, { paddingTop: safeTop ? insets.top : 0, backgroundColor }, style]}>
       {withKeyboard}
     </View>
   );

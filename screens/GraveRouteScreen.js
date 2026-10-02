@@ -1,36 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, Image,
-  Alert, Linking, ActivityIndicator, StyleSheet, Keyboard,
-} from 'react-native';
+import { View, Text, Pressable, Image, Alert, Linking, ActivityIndicator, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
+import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
+import Screen from '../components/Screen';
+import AppButton from '../components/AppButton';
+import TextField from '../components/TextField';
+import EmptyState from '../components/EmptyState';
 
-const GREEN = '#2f6f4f';
-
-const Btn = ({ label, onPress, kind, disabled }) => (
-  <TouchableOpacity
+// Small square icon button (move up/down, edit, delete) — still a full-size touch target
+const IconBtn = ({ icon, label, onPress, color = colors.primary }) => (
+  <Pressable
     onPress={onPress}
-    disabled={disabled}
-    style={[styles.btn, kind === 'grey' && styles.btnGrey, kind === 'red' && styles.btnRed, disabled && { opacity: 0.5 }]}
+    accessibilityRole="button"
+    accessibilityLabel={label}
+    style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
   >
-    <Text style={styles.btnText}>{label}</Text>
-  </TouchableOpacity>
-);
-
-const Field = ({ label, value, onChangeText, multiline, placeholder, autoCapitalize }) => (
-  <View>
-    <Text style={styles.label}>{label}</Text>
-    <TextInput
-      style={[styles.input, multiline && styles.multi]}
-      value={value}
-      onChangeText={onChangeText}
-      multiline={multiline}
-      placeholder={placeholder}
-      autoCapitalize={autoCapitalize}
-    />
-  </View>
+    <Ionicons name={icon} size={20} color={color} />
+  </Pressable>
 );
 
 const EMPTY_GRAVE = { cemetery_name: '', cemetery_map_link: '', cemetery_address: '', general_notes: '' };
@@ -48,14 +37,6 @@ export default function GraveRouteScreen({ route }) {
   const [graveForm, setGraveForm] = useState(EMPTY_GRAVE);
   const [editingGrave, setEditingGrave] = useState(false);
   const [stepForm, setStepForm] = useState(null);
-  const [kbHeight, setKbHeight] = useState(0);
-
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) => setKbHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
-    return () => { show.remove(); hide.remove(); };
-  }, []);
-
   const load = useCallback(async () => {
     if (!personId) { setLoading(false); return; }
     const { data: g, error } = await supabase
@@ -183,50 +164,108 @@ export default function GraveRouteScreen({ route }) {
     ]);
   };
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 40 }} size="large" color={GREEN} />;
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
   if (!personId) {
-    return <Text style={{ padding: 16 }}>Sorry, this screen could not tell which person you opened. Tell Claude!</Text>;
+    return (
+      <Screen>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Something went wrong"
+          message="This screen could not tell which person you opened. Please go back and try again."
+        />
+      </Screen>
+    );
   }
 
   return (
-    <ScrollView contentContainerStyle={[styles.wrap, { paddingBottom: 40 + kbHeight }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-      <Text style={styles.h1}>Grave route for {personName}</Text>
+    <Screen>
+      <Text style={styles.intro}>How to find the grave of {personName}</Text>
 
       {editingGrave ? (
-        <View>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{grave ? 'Edit cemetery' : 'First, where is the cemetery?'}</Text>
           <Text style={styles.help}>
-            Step 1: where is the cemetery? In Google Maps or Waze, tap Share → Copy link, then paste it below.
-            That link takes people to the cemetery entrance. The steps you add afterwards take over from there.
+            In Google Maps or Waze, tap Share → Copy link, then paste it below. That link takes people to the
+            cemetery entrance. The steps you add afterwards take over from there.
           </Text>
-          <Field label="Cemetery name *" value={graveForm.cemetery_name}
-            onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_name: t })} />
-          <Field label="Map link (Google Maps / Waze)" value={graveForm.cemetery_map_link} autoCapitalize="none"
-            onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_map_link: t })} />
-          <Field label="Address (optional)" value={graveForm.cemetery_address}
-            onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_address: t })} />
-          <Field label="General notes (optional)" multiline value={graveForm.general_notes}
+          <TextField
+            label="Cemetery name"
+            placeholder="e.g. Segamat Chinese Cemetery"
+            value={graveForm.cemetery_name}
+            autoCapitalize="words"
+            onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_name: t })}
+          />
+          <TextField
+            label="Map link (optional)"
+            placeholder="Paste a Google Maps or Waze link"
+            value={graveForm.cemetery_map_link}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_map_link: t })}
+          />
+          <TextField
+            label="Address (optional)"
+            value={graveForm.cemetery_address}
+            onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_address: t })}
+          />
+          <TextField
+            label="General notes (optional)"
+            multiline
+            value={graveForm.general_notes}
             placeholder="e.g. very busy during Ching Ming, arrive early"
-            onChangeText={(t) => setGraveForm({ ...graveForm, general_notes: t })} />
-          <View style={styles.row}>
-            <Btn label={saving ? 'Saving...' : 'Save cemetery'} onPress={saveGrave} disabled={saving} />
-            {grave && <Btn label="Cancel" kind="grey" onPress={() => { setEditingGrave(false); load(); }} />}
+            onChangeText={(t) => setGraveForm({ ...graveForm, general_notes: t })}
+          />
+          <AppButton title="Save cemetery" onPress={saveGrave} loading={saving} />
+          {grave ? (
+            <AppButton
+              title="Cancel"
+              variant="ghost"
+              disabled={saving}
+              onPress={() => { setEditingGrave(false); load(); }}
+              style={{ marginTop: spacing.xs }}
+            />
+          ) : null}
+        </View>
+      ) : grave ? (
+        <View style={styles.card}>
+          <View style={styles.cemeteryHeader}>
+            <View style={styles.cemeteryIcon}>
+              <Ionicons name="location-outline" size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{grave.cemetery_name}</Text>
+              {grave.cemetery_address ? <Text style={styles.muted}>{grave.cemetery_address}</Text> : null}
+            </View>
+          </View>
+          {grave.general_notes ? <Text style={styles.body}>{grave.general_notes}</Text> : null}
+          <View style={styles.buttonRow}>
+            {grave.cemetery_map_link ? (
+              <AppButton title="Open in Maps" icon="navigate-outline" compact onPress={openMap} style={styles.rowButton} />
+            ) : null}
+            <AppButton
+              title="Edit"
+              variant="secondary"
+              icon="create-outline"
+              compact
+              onPress={() => setEditingGrave(true)}
+              style={styles.rowButton}
+            />
           </View>
         </View>
       ) : (
-        <View style={styles.card}>
-          <Text style={styles.stepTitle}>{grave.cemetery_name}</Text>
-          {grave.cemetery_address ? <Text style={styles.hint}>{grave.cemetery_address}</Text> : null}
-          {grave.general_notes ? <Text>{grave.general_notes}</Text> : null}
-          <View style={styles.row}>
-            {grave.cemetery_map_link ? <Btn label="Open in Maps" onPress={openMap} /> : null}
-            <Btn label="Edit cemetery" kind="grey" onPress={() => setEditingGrave(true)} />
-          </View>
-        </View>
+        <EmptyState icon="cloud-offline-outline" title="Could not load the directions" message="Please go back and try again." />
       )}
 
       {grave && !editingGrave && (
         <View>
-          <Text style={styles.h2}>Steps from the entrance to the grave</Text>
+          <Text style={styles.sectionHeading}>From the entrance to the grave</Text>
           {steps.length === 0 && !stepForm && (
             <Text style={styles.help}>
               No steps yet. Add them in order, like: "Enter the east gate" → "Park by the red temple" →
@@ -236,70 +275,111 @@ export default function GraveRouteScreen({ route }) {
 
           {steps.map((s, i) => (
             <View key={s.id} style={styles.card}>
-              <Text style={styles.stepTitle}>{i + 1}. {s.title}</Text>
-              {s.distance_hint ? <Text style={styles.hint}>Distance: {s.distance_hint}</Text> : null}
-              {s.description ? <Text>{s.description}</Text> : null}
+              <View style={styles.stepHeader}>
+                <View style={styles.stepNumber}>
+                  <Text style={styles.stepNumberText}>{i + 1}</Text>
+                </View>
+                <Text style={[styles.cardTitle, { flex: 1 }]}>{s.title}</Text>
+              </View>
+              {s.distance_hint ? <Text style={styles.muted}>{s.distance_hint}</Text> : null}
+              {s.description ? <Text style={styles.body}>{s.description}</Text> : null}
               {s.photo_url ? <Image source={{ uri: s.photo_url }} style={styles.photo} /> : null}
-              <View style={styles.row}>
-                {i > 0 && <Btn label="Up" kind="grey" onPress={() => move(i, -1)} />}
-                {i < steps.length - 1 && <Btn label="Down" kind="grey" onPress={() => move(i, 1)} />}
-                <Btn label="Edit" onPress={() => setStepForm({
-                  id: s.id, title: s.title || '', description: s.description || '',
-                  distance_hint: s.distance_hint || '', photo_url: s.photo_url || '', newPhoto: null,
-                })} />
-                <Btn label="Delete" kind="red" onPress={() => deleteStep(s)} />
+              <View style={styles.stepActions}>
+                {i > 0 ? <IconBtn icon="arrow-up" label="Move step up" onPress={() => move(i, -1)} /> : null}
+                {i < steps.length - 1 ? <IconBtn icon="arrow-down" label="Move step down" onPress={() => move(i, 1)} /> : null}
+                <View style={{ flex: 1 }} />
+                <IconBtn
+                  icon="create-outline"
+                  label="Edit step"
+                  onPress={() => setStepForm({
+                    id: s.id, title: s.title || '', description: s.description || '',
+                    distance_hint: s.distance_hint || '', photo_url: s.photo_url || '', newPhoto: null,
+                  })}
+                />
+                <IconBtn icon="trash-outline" label="Delete step" color={colors.danger} onPress={() => deleteStep(s)} />
               </View>
             </View>
           ))}
 
           {stepForm ? (
             <View style={styles.card}>
-              <Text style={styles.stepTitle}>{stepForm.id ? 'Edit step' : 'New step'}</Text>
-              <Field label="Short title *" value={stepForm.title} placeholder="e.g. Enter via the east gate"
-                onChangeText={(t) => setStepForm({ ...stepForm, title: t })} />
-              <Field label="Details (optional)" multiline value={stepForm.description}
+              <Text style={[styles.cardTitle, { marginBottom: spacing.md }]}>{stepForm.id ? 'Edit step' : 'New step'}</Text>
+              <TextField
+                label="Short title"
+                value={stepForm.title}
+                placeholder="e.g. Enter via the east gate"
+                onChangeText={(t) => setStepForm({ ...stepForm, title: t })}
+              />
+              <TextField
+                label="Details (optional)"
+                multiline
+                value={stepForm.description}
                 placeholder="e.g. Park near the red temple building"
-                onChangeText={(t) => setStepForm({ ...stepForm, description: t })} />
-              <Field label="How far / landmark (optional)" value={stepForm.distance_hint}
+                onChangeText={(t) => setStepForm({ ...stepForm, description: t })}
+              />
+              <TextField
+                label="How far / landmark (optional)"
+                value={stepForm.distance_hint}
                 placeholder="e.g. ~100m, just past the big banyan tree"
-                onChangeText={(t) => setStepForm({ ...stepForm, distance_hint: t })} />
-              {stepForm.photo_url ? <Image source={{ uri: stepForm.photo_url }} style={styles.photo} /> : null}
-              <View style={styles.row}>
-                <Btn label={stepForm.photo_url ? 'Change photo' : 'Add photo (optional)'} kind="grey" onPress={pickPhoto} />
+                onChangeText={(t) => setStepForm({ ...stepForm, distance_hint: t })}
+              />
+              {stepForm.photo_url ? <Image source={{ uri: stepForm.photo_url }} style={[styles.photo, { marginBottom: spacing.sm }]} /> : null}
+              <View style={[styles.buttonRow, { marginTop: 0, marginBottom: spacing.md }]}>
+                <AppButton
+                  title={stepForm.photo_url ? 'Change photo' : 'Add a photo (optional)'}
+                  variant="secondary"
+                  icon="image-outline"
+                  compact
+                  onPress={pickPhoto}
+                  style={styles.rowButton}
+                />
                 {stepForm.photo_url ? (
-                  <Btn label="Remove photo" kind="grey"
-                    onPress={() => setStepForm({ ...stepForm, photo_url: '', newPhoto: null })} />
+                  <AppButton
+                    title="Remove"
+                    variant="ghost"
+                    compact
+                    onPress={() => setStepForm({ ...stepForm, photo_url: '', newPhoto: null })}
+                  />
                 ) : null}
               </View>
-              <View style={styles.row}>
-                <Btn label={saving ? 'Saving...' : 'Save step'} onPress={saveStep} disabled={saving} />
-                <Btn label="Cancel" kind="grey" onPress={() => setStepForm(null)} />
-              </View>
+              <AppButton title="Save step" onPress={saveStep} loading={saving} />
+              <AppButton title="Cancel" variant="ghost" disabled={saving} onPress={() => setStepForm(null)} style={{ marginTop: spacing.xs }} />
             </View>
           ) : (
-            <Btn label="+ Add a step" onPress={() => setStepForm({ ...EMPTY_STEP })} />
+            <AppButton title="Add a step" icon="add" onPress={() => setStepForm({ ...EMPTY_STEP })} />
           )}
         </View>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: 16, paddingBottom: 350 },
-  h1: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  h2: { fontSize: 17, fontWeight: '700', marginTop: 20, marginBottom: 6 },
-  help: { color: '#666', marginBottom: 10 },
-  label: { fontWeight: '600', marginTop: 10, marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, backgroundColor: '#fff' },
-  multi: { minHeight: 70, textAlignVertical: 'top' },
-  card: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, marginBottom: 10, backgroundColor: '#fff' },
-  stepTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  hint: { color: '#555', marginBottom: 4 },
-  photo: { width: '100%', height: 180, borderRadius: 8, marginTop: 8 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  btn: { backgroundColor: GREEN, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8, marginTop: 6 },
-  btnGrey: { backgroundColor: '#777' },
-  btnRed: { backgroundColor: '#b23b3b' },
-  btnText: { color: '#fff', fontWeight: '600' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  pressed: { opacity: 0.6 },
+  intro: { color: colors.textMuted, fontSize: fontSize.sm, marginBottom: spacing.md },
+  sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.sm, marginBottom: spacing.sm },
+  help: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20, marginBottom: spacing.md },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadow.card,
+  },
+  cardTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold },
+  muted: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
+  body: { color: colors.text, fontSize: fontSize.md, lineHeight: 22, marginTop: spacing.sm },
+  cemeteryHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cemeteryIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  rowButton: { flexGrow: 1 },
+  stepHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 4 },
+  stepNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  stepNumberText: { color: colors.textOnPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
+  photo: { width: '100%', height: 180, borderRadius: radius.md, marginTop: spacing.sm, backgroundColor: colors.surfaceAlt },
+  stepActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.surfaceAlt, paddingTop: spacing.xs },
+  iconBtn: { width: touchTarget, height: touchTarget, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });

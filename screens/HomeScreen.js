@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ActivityIndicator, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable, RefreshControl, Keyboard } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
+import Screen from '../components/Screen';
+import AppButton from '../components/AppButton';
+import TextField from '../components/TextField';
+import EmptyState from '../components/EmptyState';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I — easy to read aloud
 
@@ -18,6 +21,7 @@ function generateJoinCode(length = 6) {
 
 export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [families, setFamilies] = useState([]);
   const [familyName, setFamilyName] = useState('');
   const [surnameCn, setSurnameCn] = useState('');
@@ -31,7 +35,6 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   async function fetchFamilies() {
-    setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
@@ -43,9 +46,15 @@ export default function HomeScreen({ navigation }) {
     if (error) {
       Alert.alert('Error loading families', error.message);
     } else {
-      setFamilies(data);
+      setFamilies((data || []).filter((row) => row.families));
     }
     setLoading(false);
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchFamilies();
+    setRefreshing(false);
   }
 
   async function handleCreateFamily() {
@@ -53,6 +62,7 @@ export default function HomeScreen({ navigation }) {
       Alert.alert('Family name required', 'e.g. "Tan Family (Segamat)"');
       return;
     }
+    Keyboard.dismiss();
     setCreating(true);
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -115,68 +125,7 @@ export default function HomeScreen({ navigation }) {
       Alert.alert('Join code required', 'Ask a family admin for their 6-character join code.');
       return;
     }
-    setJoining(true);
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-       Alert.alert('Not logged in', 'Please log out and log back in.');
-      setCreating(false);
-      return;
-    }
-
-    let family = null;
-    let lastError = null;
-    for (let attempt = 0; attempt < 5 && !family; attempt++) {
-      const { data, error } = await supabase
-        .from('families')
-        .insert({
-          name: familyName.trim(),
-          surname_cn: surnameCn.trim() || null,
-          created_by: user.id,
-          join_code: generateJoinCode(),
-        })
-        .select()
-        .single();
-
-      if (!error) {
-        family = data;
-      } else {
-        lastError = error;
-      }
-    }
-
-    if (!family) {
-      Alert.alert('Error creating family', lastError?.message || 'Please try again.');
-      setCreating(false);
-      return;
-    }
-
-    const { error: memberError } = await supabase
-      .from('family_members')
-      .insert({
-        family_id: family.id,
-        user_id: user.id,
-        role: 'admin',
-      });
-
-    if (memberError) {
-      Alert.alert('Error joining family as admin', memberError.message);
-      setCreating(false);
-      return;
-    }
-
-    setFamilyName('');
-    setSurnameCn('');
-    setCreating(false);
-    fetchFamilies();
-  }
-
-  async function handleJoinFamily() {
-    const code = joinCodeInput.trim().toUpperCase();
-    if (!code) {
-      Alert.alert('Join code required', 'Ask a family admin for their 6-character join code.');
-      return;
-    }
+    Keyboard.dismiss();
     setJoining(true);
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -222,117 +171,145 @@ export default function HomeScreen({ navigation }) {
     fetchFamilies();
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
+  async function copyCode(family) {
+    await Clipboard.setStringAsync(family.join_code);
+    setCopiedId(family.id);
+    setTimeout(() => setCopiedId((current) => (current === family.id ? null : current)), 1500);
   }
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.heading}>Your Families</Text>
-
-      <FlatList
-        data={families}
-        keyExtractor={(item) => item.families.id}
-        scrollEnabled={false}
-        renderItem={({ item }) => (
-          <View style={styles.familyRow}>
+    <Screen
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+      }
+    >
+      {families.length === 0 ? (
+        <View style={styles.card}>
+          <EmptyState
+            icon="people-outline"
+            title="No families yet"
+            message="Start a new family below, or join one with a code from a relative."
+          />
+        </View>
+      ) : (
+        families.map((item) => (
+          <View key={item.families.id} style={styles.card}>
             <Pressable
-              style={{ flex: 1 }}
-              onPress={() => navigation.navigate('FamilyDetail', {
-                familyId: item.families.id,
-                familyName: item.families.name,
-              })}
+              style={({ pressed }) => [styles.familyMain, pressed && styles.pressed]}
+              onPress={() =>
+                navigation.navigate('FamilyDetail', {
+                  familyId: item.families.id,
+                  familyName: item.families.name,
+                })
+              }
+              accessibilityRole="button"
             >
-              <View style={styles.familyRowTop}>
-                <Text style={styles.familyName} numberOfLines={1}>{item.families.name}</Text>
-                <Text style={styles.familyRole}>{item.role}</Text>
+              <View style={styles.familyIcon}>
+                <Ionicons name="people" size={22} color={colors.primary} />
               </View>
-              <Text style={styles.familyCode} numberOfLines={1}>Join code: {item.families.join_code}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.familyName} numberOfLines={2}>{item.families.name}</Text>
+                <Text style={styles.familyRole}>
+                  {item.role === 'admin' ? 'You are an admin' : 'You are a member'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </Pressable>
-            <Pressable
-              onPress={async () => {
-                await Clipboard.setStringAsync(item.families.join_code);
-                setCopiedId(item.families.id);
-                setTimeout(() => setCopiedId((current) => (current === item.families.id ? null : current)), 1500);
-              }}
-              hitSlop={8}
-              style={{ padding: 8 }}
-            >
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                {copiedId === item.families.id ? 'Copied' : 'Copy'}
-              </Text>
-            </Pressable>
+            <View style={styles.codeRow}>
+              <Text style={styles.codeLabel}>Join code</Text>
+              <Text style={styles.codeValue} selectable>{item.families.join_code}</Text>
+              <Pressable
+                onPress={() => copyCode(item.families)}
+                style={({ pressed }) => [styles.copyButton, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Copy join code"
+              >
+                <Ionicons
+                  name={copiedId === item.families.id ? 'checkmark' : 'copy-outline'}
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.copyText}>{copiedId === item.families.id ? 'Copied' : 'Copy'}</Text>
+              </Pressable>
+            </View>
           </View>
-        )}
-        ListEmptyComponent={<Text style={styles.emptyText}>You haven't created or joined a family yet.</Text>}
-        style={styles.list}
-      />
+        ))
+      )}
 
-      <View style={styles.form}>
-        <Text style={styles.formHeading}>Create a New Family</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Family name (e.g. Tan Family - Segamat)"
+      <Text style={styles.sectionHeading}>Start a new family</Text>
+      <View style={[styles.card, styles.formCard]}>
+        <TextField
+          label="Family name"
+          placeholder="e.g. Tan Family - Segamat"
           value={familyName}
           onChangeText={setFamilyName}
+          autoCapitalize="words"
+          returnKeyType="next"
         />
-        <TextInput
-          style={styles.input}
-          placeholder="Chinese surname, optional (e.g. 陈)"
+        <TextField
+          label="Chinese surname (optional)"
+          placeholder="e.g. 陈"
           value={surnameCn}
           onChangeText={setSurnameCn}
+          returnKeyType="done"
         />
-        <Button
-          title={creating ? 'Creating...' : 'Create Family'}
-          onPress={handleCreateFamily}
-          disabled={creating}
-        />
+        <AppButton title="Create family" icon="add" onPress={handleCreateFamily} loading={creating} />
       </View>
 
-      <View style={styles.form}>
-        <Text style={styles.formHeading}>Join a Family</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter 6-character join code"
+      <Text style={styles.sectionHeading}>Join a family</Text>
+      <View style={[styles.card, styles.formCard]}>
+        <TextField
+          label="Join code"
+          placeholder="6 characters, from a family admin"
           value={joinCodeInput}
           onChangeText={setJoinCodeInput}
           autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={6}
+          returnKeyType="done"
+          onSubmitEditing={handleJoinFamily}
         />
-        <Button
-          title={joining ? 'Joining...' : 'Join Family'}
-          onPress={handleJoinFamily}
-          disabled={joining}
-        />
+        <AppButton title="Join family" variant="secondary" icon="enter-outline" onPress={handleJoinFamily} loading={joining} />
       </View>
-
-      <View style={styles.logoutButton}>
-        <Button title="Log Out" onPress={handleLogout} color="#999" />
-      </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  heading: { fontSize: 22, fontWeight: 'bold', marginBottom: 12 },
-  list: { marginBottom: 20 },
-  familyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  familyRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  familyName: { fontSize: 16, flexShrink: 1, marginRight: 8 },
-  familyCode: { fontSize: 12, color: '#888', marginTop: 2 },
-  familyRole: { fontSize: 14, color: '#888', flexShrink: 0 },
-  emptyText: { color: '#888', fontStyle: 'italic' },
-  form: { marginBottom: 30 },
-  formHeading: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, marginBottom: 10 },
-  logoutButton: { marginTop: 'auto' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.md,
+    ...shadow.card,
+  },
+  formCard: { padding: spacing.md },
+  pressed: { opacity: 0.6 },
+  familyMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, minHeight: touchTarget },
+  familyIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  familyName: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
+  familyRole: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
+  codeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingLeft: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.surfaceAlt,
+  },
+  codeLabel: { color: colors.textMuted, fontSize: fontSize.xs },
+  codeValue: { flex: 1, color: colors.text, fontSize: fontSize.sm, fontWeight: fontWeight.medium, letterSpacing: 1.5 },
+  copyButton: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: touchTarget, paddingHorizontal: spacing.md },
+  copyText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.sm, marginBottom: spacing.sm },
 });

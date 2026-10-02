@@ -173,15 +173,14 @@ Mark off each stage here as you complete it, so your "resume" message can just s
   - [X] Stage 2d — Photos
 - [X] Stage 3 — Grave Route Finder
 - [X] Stage 4 — QR Codes
-- [ ] Stage 4.5 — Look & Feel Foundation
+- [X] Stage 4.5 — Look & Feel Foundation (iPhone test still to do — left for the end, before Stage 8)
     - [X] Stage 4.5a — Theme file (lib/theme.js) + shared Screen wrapper (components/Screen.js)
     - [X] Stage 4.5b — Translation helper plumbing (lib/i18n.js) — full bilingual toggle still deferred to Stage 7
     - [X] Stage 4.5c — Logo/icon/splash placeholders
     - [X] Stage 4.5d — Bottom-tab navigation (Families/Settings) + Settings screen
     - [X] Stage 4.5e — Person screen — all known gaps fixed: (a) Families tab has its own nested stack navigator, so the tab icon jumps to Home from any depth, and a "Family" header button on the Person screen jumps straight to that family's member list from any depth; (b) keyboard no longer dismisses on scroll; (c) "Add a Person" is now a floating + button that reveals the form; (d) link-picker wording and Cancel button position fixed, plus validation blocking contradictory links (e.g. spouse vs already parent/child) — PersonScreen.js's dedupe kept as a safety net. Known minor item: system "Large text" compatibility check not done this round — flagged for Stage 4.5f.
 - Idea logged for Stage 5 (Interactive Family Tree): the flat person list in FamilyDetailScreen doesn't scale well for big families — plan for the tree view (already grouped by generation per the mockup rules) to be the real answer, rather than adding a second immediate/extended grouping scheme to the flat list.
-    - [ ] Stage 4.5f — Compatibility pass on remaining older screens. Also restyle HomeScreen.js: card-style family rows (not plain text), visual separation between the three sections, remove full-width Log Out button (redundant with Settings tab).
-    - Also restyle HomeScreen.js: card-style family rows (not plain text), visual separation between the three sections, remove full-width Log Out button (redundant with Settings tab).
+    - [X] Stage 4.5f — Compatibility + polish pass on every screen (done with Claude Code). All screens now use the shared Screen wrapper and theme; new shared components AppButton, TextField, DateField, Avatar, EmptyState; HomeScreen restyled with cards and Log Out removed (it lives in Settings). Checked on the owner's Android phone; a doubled keyboard/bottom gap found there was fixed in components/Screen.js. Still to do before Stage 8: the iPhone test, and the system "Large text" check carried over from 4.5e if not already done.
 - [ ] Stage 5 — Interactive Family Tree
 - [ ] Stage 6 — Generation Name Book
 - [ ] Stage 7 — Bilingual Toggle & Final Polish
@@ -194,7 +193,10 @@ Mark off each stage here as you complete it, so your "resume" message can just s
 - `lib/supabase.js` — Supabase client, reads keys from `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`). Uses AsyncStorage for session persistence.
 `formatISOToDisplay`, `isoToDate`), the date-range text under a name (`formatPersonMeta`), and a Yes/No popup (`askYesNo`).
 - `lib/theme.js` — shared style rulebook (colors, spacing, radius, fontSize, fontWeight, touchTarget) — jade green (#2F5D4E) + warm gold accent palette. New/updated screens should pull colors from here instead of hard-coding them.
-- `components/Screen.js` — shared screen wrapper (Stage 4.5a): handles safe-area insets (notch/status bar/Android nav buttons) and keyboard behavior via `scroll`/`keyboardAvoiding` props. Older screens don't use it yet — that's Stage 4.5f (compatibility pass), still pending for WelcomeScreen.js, BiographyScreen.js, GraveRouteScreen.js, GraveQRScreen.js.
+- `components/Screen.js` — shared screen wrapper used by EVERY screen: background colour, safe areas, keyboard handling (iPhone: KeyboardAvoidingView offset by the title-bar height; Android: KeyboardAvoidingView "height"). Screens inside the bottom tabs skip the bottom safe-area padding because the tab bar already covers it. Props: `scroll`, `keyboardAvoiding`, `safeTop` (only for screens with no title bar, i.e. Welcome), `scrollRef`, `overlay` (floating + button), `refreshControl`.
+- `components/AppButton.js` — the one button for the whole app (variants: primary, secondary, ghost, danger, dangerOutline; optional icon and loading spinner). Do not use React Native's built-in `<Button>` — it looks different on iPhone and Android.
+- `components/TextField.js` (labelled text box), `components/DateField.js` (tap-to-pick date: Android calendar popup, iPhone scroll-wheel with Done, plus a clear button), `components/Avatar.js` (gold initial circle), `components/EmptyState.js` (icon + title + hint for empty/error states).
+- Navigation notes (Stage 4.5f): title bars and screen backgrounds are themed once in `navigation/RootNavigator.js` (`headerOptions`, `navTheme`); Welcome has no title bar; FamilyDetail's title comes from the route. FamilyDetailScreen reloads its list whenever it comes back into view, and when its form was opened from a Person screen (Edit / + relative), saving or cancelling returns to that Person screen. The Person screen's ⋯ menu is now a bottom sheet.
 - `lib/i18n.js` — translation helper plumbing (Stage 4.5b): `LanguageProvider` + `useTranslation()` hook with a small EN/ZH string dictionary. App always shows English for now — screens don't call `t()` yet; the full bilingual pass is Stage 7.
 - `App.js` — wraps `RootNavigator` in `SafeAreaProvider` (react-native-safe-area-context) and `LanguageProvider` (lib/i18n.js).
 - `app.json` — icon/splash/Android adaptive-icon assets replaced with jade-tree placeholders (Stage 4.5c); `expo-splash-screen` plugin configured pointing at `assets/splash.png`. Note: Expo Go always shows its own default loading screen while the JS bundle loads — the custom splash/icon only appears once built as a standalone app (near Stage 8).

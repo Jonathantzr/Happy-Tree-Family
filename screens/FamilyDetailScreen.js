@@ -1,9 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, Pressable, Switch, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable, Switch } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
-import { formatDateDisplay, toISODate, formatPersonMeta, isoToDate, askYesNo } from '../lib/personHelpers';
+import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
+import { toISODate, formatPersonMeta, isoToDate, askYesNo } from '../lib/personHelpers';
+import Screen from '../components/Screen';
+import AppButton from '../components/AppButton';
+import TextField from '../components/TextField';
+import DateField from '../components/DateField';
+import Avatar from '../components/Avatar';
+import EmptyState from '../components/EmptyState';
 
 
 export default function FamilyDetailScreen({ route, navigation }) {
@@ -15,8 +22,6 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [isDeceased, setIsDeceased] = useState(false);
   const [birthDate, setBirthDate] = useState(null); // JS Date or null
   const [deathDate, setDeathDate] = useState(null);
-  const [showBirthPicker, setShowBirthPicker] = useState(false);
-  const [showDeathPicker, setShowDeathPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef(null);
   const [relationships, setRelationships] = useState([]);
@@ -24,7 +29,8 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [formMode, setFormMode] = useState(null);
   const [formVisible, setFormVisible] = useState(false);
   const [pickExisting, setPickExisting] = useState(true);
-  const [kbHeight, setKbHeight] = useState(0);
+  // true when the form was opened from a Person screen, so closing it goes back there
+  const cameFromPerson = useRef(false);
     useEffect(() => {
     if (!route.params) return;
     const { openEdit, openRelative, openDelete } = route.params;
@@ -45,26 +51,20 @@ export default function FamilyDetailScreen({ route, navigation }) {
     navigation.setParams({ openEdit: undefined, openRelative: undefined, openDelete: undefined });
 
     if (openEdit || openRelative) {
+      cameFromPerson.current = true;
       setFormVisible(true);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
     }
   }, [route.params, people]);
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) => setKbHeight(e.endCoordinates.height));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    navigation.setOptions({ title: familyName });
-    fetchPeople();
-  }, []);
+  // Re-loads every time this screen comes into view (e.g. after someone was
+  // edited or deleted on the Person screen), not just on first open.
+  useFocusEffect(
+    useCallback(() => {
+      fetchPeople();
+    }, [familyId])
+  );
 
   async function fetchPeople() {
-    setLoading(true);
     const { data, error } = await supabase
       .from('persons')
       .select('*')
@@ -165,6 +165,14 @@ export default function FamilyDetailScreen({ route, navigation }) {
     setBirthDate(null);
     setDeathDate(null);
     setPickExisting(true);
+  }
+
+  function closeForm() {
+    resetForm();
+    if (cameFromPerson.current) {
+      cameFromPerson.current = false;
+      if (navigation.canGoBack()) navigation.goBack();
+    }
   }
 
   function scrollToForm() {
@@ -287,9 +295,9 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
     const { error } = await supabase.from('person_relationships').insert(rows);
     if (error) Alert.alert('Linking failed', error.message);
-    resetForm();
     setSaving(false);
     fetchPeople();
+    closeForm();
   }
 
   async function handleSave() {
@@ -320,9 +328,9 @@ export default function FamilyDetailScreen({ route, navigation }) {
         setSaving(false);
         return;
       }
-      resetForm();
       setSaving(false);
       fetchPeople();
+      closeForm();
       return;
     }
 
@@ -388,282 +396,271 @@ export default function FamilyDetailScreen({ route, navigation }) {
       }
     }
 
-    resetForm();
     setSaving(false);
     fetchPeople();
+    closeForm();
   }
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
+  const fab = !formVisible ? (
+    <Pressable
+      onPress={() => {
+        setFormMode(null);
+        setFormVisible(true);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
+      }}
+      style={({ pressed }) => [styles.fab, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel="Add a person"
+    >
+      <Ionicons name="add" size={30} color={colors.textOnPrimary} />
+    </Pressable>
+  ) : null;
+
+  const isEdit = formMode && formMode.kind === 'edit';
+  const isRelative = formMode && formMode.kind !== 'edit';
+  const pickablePeople = isRelative ? people.filter((p) => p.id !== formMode.person.id) : [];
+
   return (
-    <View style={styles.container}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        {!formVisible && (
-          <Pressable
-            onPress={() => {
-              setFormMode(null);
-              setFormVisible(true);
-              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
-            }}
-            style={styles.fab}
-          >
-            <Text style={styles.fabIcon}>+</Text>
-          </Pressable>
-        )}
-        <ScrollView
-          ref={scrollRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 + kbHeight }]}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.list}>
-            {people.length === 0 ? (
-              <Text style={styles.emptyText}>No one added yet — add the first person below.</Text>
-            ) : (
-              people.map((item) => (
-                <Pressable
-                  key={item.id}
-                  style={styles.personRow}
-                  onPress={() =>
-                    navigation.navigate('Person', {
-                      familyId,
-                      familyName,
-                      personId: item.id,
-                      personName: personLabel(item),
-                    })
-                  }
-                >
-                  <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarInitial}>
-                      {personLabel(item).trim().charAt(0).toUpperCase() || '?'}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.personName}>{personLabel(item)}</Text>
-                    {formatPersonMeta(item) ? (
-                      <Text style={styles.personMeta}>{formatPersonMeta(item)}</Text>
-                    ) : null}
-                    {item.is_deceased ? <Text style={styles.memoryTag}>In memory</Text> : null}
-                  </View>
-                  <Text style={styles.chevron}>›</Text>
-                </Pressable>
-              ))
-            )}
-            {people.length > 0 && (
-              <Text style={{ textAlign: 'center', color: '#999', fontSize: 12, marginTop: 16, marginBottom: 8 }}>
-                That's everyone so far — tap + to add more
-              </Text>
-            )}
-          </View>
-
-          {formVisible && (
-          <View style={styles.form}>
-            <Text style={styles.formHeading}>
-              {!formMode
-                ? 'Add a Person'
-                : formMode.kind === 'edit'
-                ? `Editing ${personLabel(formMode.person)}`
-                : `Add a ${formMode.kind} of ${personLabel(formMode.person)}`}
-            </Text>
-            {formMode && formMode.kind === 'edit' && (
-              <View style={{ marginBottom: 10 }}>
-                <Text style={{ fontWeight: '600', marginBottom: 4 }}>Links (tap Remove to undo a mistake)</Text>
-                {linksOf(formMode.person.id).length === 0 ? (
-                  <Text style={styles.personMeta}>No links yet.</Text>
-                ) : (
-                  linksOf(formMode.person.id).map((l) => (
-                    <View key={l.relId} style={styles.linkRow}>
-                      <Text>{l.text}</Text>
-                      <Pressable onPress={() => removeLink(l.relId)} style={[styles.smallButton, styles.deleteButton]}>
-                        <Text style={styles.deleteText}>Remove</Text>
-                      </Pressable>
-                    </View>
-                  ))
-                )}
+    <Screen scrollRef={scrollRef} overlay={fab}>
+      {people.length === 0 ? (
+        !formVisible && (
+          <EmptyState
+            icon="person-add-outline"
+            title="No one added yet"
+            message="Tap the + button to add the first person — starting with yourself works well."
+          />
+        )
+      ) : (
+        <View style={styles.listCard}>
+          {people.map((item, index) => (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [styles.personRow, index > 0 && styles.rowDivider, pressed && styles.pressed]}
+              onPress={() =>
+                navigation.navigate('Person', {
+                  familyId,
+                  familyName,
+                  personId: item.id,
+                  personName: personLabel(item),
+                })
+              }
+              accessibilityRole="button"
+            >
+              <Avatar name={personLabel(item)} size={48} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.personName}>{personLabel(item)}</Text>
+                {formatPersonMeta(item) ? (
+                  <Text style={styles.personMeta}>{formatPersonMeta(item)}</Text>
+                ) : null}
+                {item.is_deceased ? <Text style={styles.memoryTag}>In memory</Text> : null}
               </View>
-            )}
-
-            {formMode && formMode.kind !== 'edit' && (
-              <View style={{ marginBottom: 10 }}>
-                <Pressable onPress={() => setPickExisting(!pickExisting)} style={styles.smallButton}>
-                  <Text style={styles.smallButtonText}>
-                    {pickExisting ? "Hide list — I'll add a new person instead" : 'Link to someone already in the family'}
-                  </Text>
-                </Pressable>
-                {pickExisting && (
-                  <>
-                    <Text style={{ marginTop: 6, marginBottom: 4, color: '#666' }}>Tap a name to link:</Text>
-                    {people
-                      .filter((p) => p.id !== formMode.person.id)
-                      .map((p) => (
-                        <Pressable key={p.id} onPress={() => linkExisting(p)} style={styles.pickRow}>
-                          <Text>
-                            {personLabel(p)}
-                            {formatPersonMeta(p) ? `  (${formatPersonMeta(p)})` : ''}
-                          </Text>
-                        </Pressable>
-                      ))}
-                  </>
-                )}
-              </View>
-            )}
-
-            <TextInput
-              style={styles.input}
-              placeholder="Name"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-            />
-
-            <View style={styles.genderRow}>
-              {['M', 'F', 'other'].map((g) => (
-                <Pressable
-                  key={g}
-                  onPress={() => setGender(gender === g ? null : g)}
-                  style={[styles.genderButton, gender === g && styles.genderButtonSelected]}
-                >
-                  <Text style={gender === g ? styles.genderTextSelected : styles.genderText}>
-                    {g === 'M' ? 'Male' : g === 'F' ? 'Female' : 'Other'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text>Deceased</Text>
-              <Switch value={isDeceased} onValueChange={setIsDeceased} />
-            </View>
-
-            <Pressable style={styles.input} onPress={() => setShowBirthPicker(true)}>
-              <Text style={birthDate ? styles.dateText : styles.datePlaceholder}>
-                {birthDate ? formatDateDisplay(birthDate) : 'Birth date, optional — tap to pick'}
-              </Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </Pressable>
-            {showBirthPicker && (
-              <DateTimePicker
-                value={birthDate || new Date()}
-                mode="date"
-                display="default"
-                maximumDate={new Date()}
-                minimumDate={new Date(1500, 0, 1)}
-                onChange={(event, selectedDate) => {
-                  setShowBirthPicker(false);
-                  if (event.type === 'set' && selectedDate) {
-                    setBirthDate(selectedDate);
-                  }
-                }}
-              />
-            )}
+          ))}
+        </View>
+      )}
 
-            {isDeceased && (
-              <>
-                <Pressable style={styles.input} onPress={() => setShowDeathPicker(true)}>
-                  <Text style={deathDate ? styles.dateText : styles.datePlaceholder}>
-                    {deathDate ? formatDateDisplay(deathDate) : 'Death date, optional — tap to pick'}
-                  </Text>
-                </Pressable>
-                {showDeathPicker && (
-                  <DateTimePicker
-                    value={deathDate || new Date()}
-                    mode="date"
-                    display="default"
-                    maximumDate={new Date()}
-                    minimumDate={new Date(1500, 0, 1)}
-                    onChange={(event, selectedDate) => {
-                      setShowDeathPicker(false);
-                      if (event.type === 'set' && selectedDate) {
-                        setDeathDate(selectedDate);
-                      }
-                    }}
-                  />
-                )}
-              </>
-            )}
+      {people.length > 0 && !formVisible && (
+        <Text style={styles.listHint}>That's everyone so far — tap + to add more</Text>
+      )}
 
-            <Button
-              title={saving ? 'Saving...' : formMode && formMode.kind === 'edit' ? 'Save Changes' : 'Add Person'}
-              onPress={handleSave}
-              disabled={saving}
-            />
-            {formMode && (
-              <Pressable onPress={resetForm} style={{ marginTop: 12, alignItems: 'center' }}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </Pressable>
-            )}
-          </View>
+      {formVisible && (
+        <View style={styles.formCard}>
+          <Text style={styles.formHeading}>
+            {!formMode
+              ? 'Add a person'
+              : isEdit
+              ? `Editing ${personLabel(formMode.person)}`
+              : `Add a ${formMode.kind} of ${personLabel(formMode.person)}`}
+          </Text>
+
+          {isEdit && (
+            <View style={styles.formSection}>
+              <Text style={styles.fieldLabel}>Family links</Text>
+              {linksOf(formMode.person.id).length === 0 ? (
+                <Text style={styles.personMeta}>No links yet.</Text>
+              ) : (
+                linksOf(formMode.person.id).map((l) => (
+                  <View key={l.relId} style={styles.linkRow}>
+                    <Text style={styles.linkText}>{l.text}</Text>
+                    <Pressable
+                      onPress={() => removeLink(l.relId)}
+                      style={({ pressed }) => [styles.removeButton, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.removeText}>Remove</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+
+          {isRelative && (
+            <View style={styles.formSection}>
+              <AppButton
+                variant="secondary"
+                compact
+                icon={pickExisting ? 'person-add-outline' : 'people-outline'}
+                title={pickExisting ? "They're not in the list — add a new person" : 'Pick someone already in the family'}
+                onPress={() => setPickExisting(!pickExisting)}
+              />
+              {pickExisting && (
+                <>
+                  <Text style={styles.pickHint}>
+                    {pickablePeople.length > 0
+                      ? 'Already in the family? Tap their name to link them:'
+                      : 'No one else is in this family yet — add them as a new person below.'}
+                  </Text>
+                  {pickablePeople.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => linkExisting(p)}
+                      disabled={saving}
+                      style={({ pressed }) => [styles.pickRow, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                    >
+                      <Avatar name={personLabel(p)} size={32} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.linkText}>{personLabel(p)}</Text>
+                        {formatPersonMeta(p) ? <Text style={styles.personMeta}>{formatPersonMeta(p)}</Text> : null}
+                      </View>
+                      <Ionicons name="link-outline" size={18} color={colors.primary} />
+                    </Pressable>
+                  ))}
+                  {pickablePeople.length > 0 && <Text style={styles.orText}>Or add them as a new person:</Text>}
+                </>
+              )}
+            </View>
+          )}
+
+          <TextField
+            label="Name"
+            placeholder="Full name"
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            returnKeyType="done"
+          />
+
+          <Text style={styles.fieldLabel}>Gender</Text>
+          <View style={styles.genderRow}>
+            {['M', 'F', 'other'].map((g) => (
+              <Pressable
+                key={g}
+                onPress={() => setGender(gender === g ? null : g)}
+                style={[styles.genderButton, gender === g && styles.genderButtonSelected]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: gender === g }}
+              >
+                <Text style={gender === g ? styles.genderTextSelected : styles.genderText}>
+                  {g === 'M' ? 'Male' : g === 'F' ? 'Female' : 'Other'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>This person has passed away</Text>
+            <Switch
+              value={isDeceased}
+              onValueChange={setIsDeceased}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.surface}
+              ios_backgroundColor={colors.border}
+            />
+          </View>
+
+          <DateField
+            label="Birth date (optional)"
+            placeholder="Tap to pick a date"
+            value={birthDate}
+            onChange={setBirthDate}
+          />
+          {isDeceased && (
+            <DateField
+              label="Date of passing (optional)"
+              placeholder="Tap to pick a date"
+              value={deathDate}
+              onChange={setDeathDate}
+            />
+          )}
+
+          <AppButton
+            title={isEdit ? 'Save changes' : 'Add person'}
+            onPress={handleSave}
+            loading={saving}
+          />
+          <AppButton title="Cancel" variant="ghost" onPress={closeForm} disabled={saving} style={{ marginTop: spacing.xs }} />
+        </View>
+      )}
+
+      {/* leaves room so the round + button never covers the last row */}
+      {!formVisible && <View style={{ height: 72 }} />}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-    fab: {
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  pressed: { opacity: 0.6 },
+  fab: {
     position: 'absolute',
     right: 20,
     bottom: 24,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#2F5D4E',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    zIndex: 10,
+    ...shadow.floating,
   },
-  fabIcon: {
-    color: '#fff',
-    fontSize: 30,
-    lineHeight: 32,
-    fontWeight: '600',
+  listCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
-  linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  pickRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  personLinks: { fontSize: 12, color: '#555', marginTop: 2 },
-  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  smallButton: { borderWidth: 1, borderColor: '#999', borderRadius: 6, paddingVertical: 4, paddingHorizontal: 8 },
-  smallButtonDisabled: { opacity: 0.4 },
-  smallButtonText: { fontSize: 12, color: '#333' },
-  deleteButton: { borderColor: '#c0392b' },
-  deleteText: { fontSize: 12, color: '#c0392b' },
-  cancelText: { color: '#c0392b', marginBottom: 10 },
-  container: { flex: 1, paddingHorizontal: 20, backgroundColor: colors.background },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  scrollContent: { paddingBottom: 40 },
-  list: { marginBottom: 10 },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingRight: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  avatarCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#C9A24B', alignItems: 'center', justifyContent: 'center' },
-  avatarInitial: { color: '#fff', fontWeight: '700', fontSize: 18 },
-  memoryTag: { color: '#2F5D4E', fontSize: 11, fontStyle: 'italic', marginTop: 2 },
-  chevron: { color: '#999', fontSize: 20 },
-  personName: { fontSize: 16 },
-  personMeta: { fontSize: 12, color: '#888', marginTop: 2 },
-  emptyText: { color: '#888', fontStyle: 'italic' },
-  form: { marginTop: 10, borderTopWidth: 1, borderTopColor: '#ddd', paddingTop: 16 },
-  formHeading: { fontSize: 18, fontWeight: '600', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 10, marginBottom: 10, justifyContent: 'center', minHeight: 44 },
-  dateText: { color: '#000' },
-  datePlaceholder: { color: '#999' },
-  genderRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  genderButton: { flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8, alignItems: 'center' },
-  genderButtonSelected: { backgroundColor: '#333', borderColor: '#333' },
-  genderText: { color: '#333' },
-  genderTextSelected: { color: '#fff' },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md - 4, paddingHorizontal: spacing.md, minHeight: 72 },
+  rowDivider: { borderTopWidth: 1, borderTopColor: colors.surfaceAlt },
+  personName: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
+  personMeta: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
+  memoryTag: { color: colors.primary, fontSize: fontSize.xs, fontStyle: 'italic', marginTop: 2 },
+  listHint: { textAlign: 'center', color: colors.textMuted, fontSize: fontSize.xs, marginTop: spacing.md },
+  formCard: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    ...shadow.card,
+  },
+  formHeading: { color: colors.text, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginBottom: spacing.md },
+  formSection: { marginBottom: spacing.md },
+  fieldLabel: { color: colors.text, fontSize: fontSize.sm, fontWeight: fontWeight.medium, marginBottom: spacing.xs + 2 },
+  linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget, borderBottomWidth: 1, borderBottomColor: colors.surfaceAlt },
+  linkText: { flex: 1, color: colors.text, fontSize: fontSize.md },
+  removeButton: { minHeight: touchTarget, paddingHorizontal: spacing.sm, justifyContent: 'center' },
+  removeText: { color: colors.danger, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  pickHint: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: spacing.md, marginBottom: spacing.xs },
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: touchTarget, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.surfaceAlt },
+  orText: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: spacing.md },
+  genderRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  genderButton: { flex: 1, minHeight: touchTarget, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  genderButtonSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  genderText: { color: colors.text, fontSize: fontSize.sm },
+  genderTextSelected: { color: colors.textOnPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md, minHeight: touchTarget, marginBottom: spacing.md },
+  switchLabel: { flex: 1, color: colors.text, fontSize: fontSize.md },
 });

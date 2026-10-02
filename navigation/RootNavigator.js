@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { View, ActivityIndicator, Pressable, Text } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { colors } from '../lib/theme';
+import { colors, fontSize, fontWeight, touchTarget } from '../lib/theme';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -20,11 +20,38 @@ const Tab = createBottomTabNavigator();
 
 const FamiliesStack = createNativeStackNavigator();
 
+// Makes every screen's backdrop the app's warm off-white instead of the
+// default gray, and tints links/back arrows jade green.
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: colors.primary,
+    background: colors.background,
+    card: colors.surface,
+    text: colors.text,
+    border: colors.border,
+  },
+};
+
+// One look for every title bar in the app.
+const headerOptions = {
+  headerStyle: { backgroundColor: colors.surface },
+  headerTintColor: colors.primary,
+  headerTitleStyle: { color: colors.text, fontWeight: fontWeight.medium },
+  headerBackButtonDisplayMode: 'minimal',
+  contentStyle: { backgroundColor: colors.background },
+};
+
 function FamiliesStackScreen() {
   return (
-    <FamiliesStack.Navigator>
+    <FamiliesStack.Navigator screenOptions={headerOptions}>
       <FamiliesStack.Screen name="Home" component={HomeScreen} options={{ title: 'Your Families' }} />
-      <FamiliesStack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
+      <FamiliesStack.Screen
+        name="FamilyDetail"
+        component={FamilyDetailScreen}
+        options={({ route }) => ({ title: route.params?.familyName || 'Family' })}
+      />
       <FamiliesStack.Screen
         name="Person"
         component={PersonScreen}
@@ -33,14 +60,18 @@ function FamiliesStackScreen() {
           headerRight: () => (
             <Pressable
               onPress={() =>
-                navigation.navigate('FamilyDetail', {
+                navigation.popTo('FamilyDetail', {
                   familyId: route.params?.familyId,
                   familyName: route.params?.familyName,
                 })
               }
-              style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back to the family list"
+              style={{ minHeight: touchTarget - 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
             >
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>Family</Text>
+              <Ionicons name="people-outline" size={18} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium }}>Family</Text>
             </Pressable>
           ),
         })}
@@ -48,13 +79,13 @@ function FamiliesStackScreen() {
       <FamiliesStack.Screen
         name="Biography"
         component={BiographyScreen}
-        options={({ route }) => ({ title: route.params?.personName || 'Biography' })}
+        options={({ route }) => ({ title: route.params?.personName || 'Story' })}
       />
       <FamiliesStack.Screen name="GraveQR" component={GraveQRScreen} options={{ title: 'QR code' }} />
       <FamiliesStack.Screen
         name="GraveRoute"
         component={GraveRouteScreen}
-        options={{ title: 'Grave Route' }}
+        options={{ title: 'Directions to the grave' }}
       />
     </FamiliesStack.Navigator>
   );
@@ -67,15 +98,17 @@ function MainTabs() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        tabBarHideOnKeyboard: true,
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.text,
-        tabBarIcon: ({ color, size }) => {
-          const iconName = route.name === 'Families' ? 'people' : 'settings';
-          return <Ionicons name={iconName} size={size} color={color} />;
+        headerTitleStyle: { color: colors.text, fontWeight: fontWeight.medium },
+        tabBarIcon: ({ color, size, focused }) => {
+          const base = route.name === 'Families' ? 'people' : 'settings';
+          return <Ionicons name={focused ? base : `${base}-outline`} size={size} color={color} />;
         },
       })}
     >
-      <Tab.Screen name="Families" component={FamiliesStackScreen} options={{ headerShown: false, title: 'Your Families' }} />
+      <Tab.Screen name="Families" component={FamiliesStackScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -111,14 +144,14 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator>
+    <NavigationContainer theme={navTheme}>
+      <Stack.Navigator screenOptions={headerOptions}>
         {session ? (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
           </>
         ) : (
-          <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ title: 'Happy Tree Family' }} />
+          <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
