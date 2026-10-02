@@ -22,6 +22,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [relationships, setRelationships] = useState([]);
   // null = adding a plain person. Otherwise { kind: 'edit'|'parent'|'sibling'|'spouse'|'child', person: the card you tapped }
   const [formMode, setFormMode] = useState(null);
+  const [formVisible, setFormVisible] = useState(false);
   const [pickExisting, setPickExisting] = useState(true);
   const [kbHeight, setKbHeight] = useState(0);
     useEffect(() => {
@@ -44,6 +45,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
     navigation.setParams({ openEdit: undefined, openRelative: undefined, openDelete: undefined });
 
     if (openEdit || openRelative) {
+      setFormVisible(true);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
     }
   }, [route.params, people]);
@@ -156,6 +158,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
   function resetForm() {
     setFormMode(null);
+    setFormVisible(false);
     setName('');
     setGender(null);
     setIsDeceased(false);
@@ -211,6 +214,18 @@ export default function FamilyDetailScreen({ route, navigation }) {
     const kind = formMode.kind;
     const target = formMode.person;
     const row = (child, parent, type = 'parent') => ({ person_id: child, related_person_id: parent, relation_type: type });
+
+    const isParentOrChild = (a, b) => parentIdsOf(a).includes(b) || parentIdsOf(b).includes(a);
+
+    if (kind === 'spouse' && isParentOrChild(target.id, other.id)) {
+      Alert.alert('Cannot link', `${personLabel(other)} is already linked as a parent or child of ${personLabel(target)} — two people can't be both.`);
+      return;
+    }
+    if ((kind === 'parent' || kind === 'child') && spouseIdsOf(target.id).includes(other.id)) {
+      Alert.alert('Cannot link', `${personLabel(other)} is already linked as a spouse of ${personLabel(target)} — two people can't be both.`);
+      return;
+    }
+
     setSaving(true);
     let rows = [];
 
@@ -393,7 +408,19 @@ export default function FamilyDetailScreen({ route, navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <ScrollView ref={scrollRef} keyboardDismissMode="on-drag" contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 + kbHeight }]} keyboardShouldPersistTaps="handled">
+        {!formVisible && (
+          <Pressable
+            onPress={() => {
+              setFormMode(null);
+              setFormVisible(true);
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 200);
+            }}
+            style={styles.fab}
+          >
+            <Text style={styles.fabIcon}>+</Text>
+          </Pressable>
+        )}
+        <ScrollView ref={scrollRef} contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 + kbHeight }]} keyboardShouldPersistTaps="handled">
           <View style={styles.list}>
             {people.length === 0 ? (
               <Text style={styles.emptyText}>No one added yet — add the first person below.</Text>
@@ -429,6 +456,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
             )}
           </View>
 
+          {formVisible && (
           <View style={styles.form}>
             <Text style={styles.formHeading}>
               {!formMode
@@ -437,12 +465,6 @@ export default function FamilyDetailScreen({ route, navigation }) {
                 ? `Editing ${personLabel(formMode.person)}`
                 : `Add a ${formMode.kind} of ${personLabel(formMode.person)}`}
             </Text>
-            {formMode && (
-              <Pressable onPress={resetForm}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </Pressable>
-            )}
-
             {formMode && formMode.kind === 'edit' && (
               <View style={{ marginBottom: 10 }}>
                 <Text style={{ fontWeight: '600', marginBottom: 4 }}>Links (tap Remove to undo a mistake)</Text>
@@ -465,20 +487,24 @@ export default function FamilyDetailScreen({ route, navigation }) {
               <View style={{ marginBottom: 10 }}>
                 <Pressable onPress={() => setPickExisting(!pickExisting)} style={styles.smallButton}>
                   <Text style={styles.smallButtonText}>
-                    {pickExisting ? 'Tap a name below to link them (tap here to hide)' : 'Show people already added'}
+                    {pickExisting ? "Hide list — I'll add a new person instead" : 'Link to someone already in the family'}
                   </Text>
                 </Pressable>
-                {pickExisting &&
-                  people
-                    .filter((p) => p.id !== formMode.person.id)
-                    .map((p) => (
-                      <Pressable key={p.id} onPress={() => linkExisting(p)} style={styles.pickRow}>
-                        <Text>
-                          {personLabel(p)}
-                          {formatPersonMeta(p) ? `  (${formatPersonMeta(p)})` : ''}
-                        </Text>
-                      </Pressable>
-                    ))}
+                {pickExisting && (
+                  <>
+                    <Text style={{ marginTop: 6, marginBottom: 4, color: '#666' }}>Tap a name to link:</Text>
+                    {people
+                      .filter((p) => p.id !== formMode.person.id)
+                      .map((p) => (
+                        <Pressable key={p.id} onPress={() => linkExisting(p)} style={styles.pickRow}>
+                          <Text>
+                            {personLabel(p)}
+                            {formatPersonMeta(p) ? `  (${formatPersonMeta(p)})` : ''}
+                          </Text>
+                        </Pressable>
+                      ))}
+                  </>
+                )}
               </View>
             )}
 
@@ -560,7 +586,13 @@ export default function FamilyDetailScreen({ route, navigation }) {
               onPress={handleSave}
               disabled={saving}
             />
+            {formMode && (
+              <Pressable onPress={resetForm} style={{ marginTop: 12, alignItems: 'center' }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            )}
           </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -568,6 +600,29 @@ export default function FamilyDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+    fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2F5D4E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    zIndex: 10,
+  },
+  fabIcon: {
+    color: '#fff',
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: '600',
+  },
   linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   pickRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
   personLinks: { fontSize: 12, color: '#555', marginTop: 2 },

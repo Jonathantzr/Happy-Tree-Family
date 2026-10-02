@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Pressable, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -18,6 +18,48 @@ import GraveQRScreen from '../screens/GraveQRScreen';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const FamiliesStack = createNativeStackNavigator();
+
+function FamiliesStackScreen() {
+  return (
+    <FamiliesStack.Navigator>
+      <FamiliesStack.Screen name="Home" component={HomeScreen} options={{ title: 'Your Families' }} />
+      <FamiliesStack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
+      <FamiliesStack.Screen
+        name="Person"
+        component={PersonScreen}
+        options={({ route, navigation }) => ({
+          title: route.params?.personName || 'Person',
+          headerRight: () => (
+            <Pressable
+              onPress={() =>
+                navigation.navigate('FamilyDetail', {
+                  familyId: route.params?.familyId,
+                  familyName: route.params?.familyName,
+                })
+              }
+              style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+            >
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>Family</Text>
+            </Pressable>
+          ),
+        })}
+      />
+      <FamiliesStack.Screen
+        name="Biography"
+        component={BiographyScreen}
+        options={({ route }) => ({ title: route.params?.personName || 'Biography' })}
+      />
+      <FamiliesStack.Screen name="GraveQR" component={GraveQRScreen} options={{ title: 'QR code' }} />
+      <FamiliesStack.Screen
+        name="GraveRoute"
+        component={GraveRouteScreen}
+        options={{ title: 'Grave Route' }}
+      />
+    </FamiliesStack.Navigator>
+  );
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -33,7 +75,7 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen name="Families" component={HomeScreen} options={{ title: 'Your Families' }} />
+      <Tab.Screen name="Families" component={FamiliesStackScreen} options={{ headerShown: false, title: 'Your Families' }} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
@@ -74,23 +116,6 @@ export default function RootNavigator() {
         {session ? (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
-            <Stack.Screen name="FamilyDetail" component={FamilyDetailScreen} />
-            <Stack.Screen
-              name="Person"
-              component={PersonScreen}
-              options={({ route }) => ({ title: route.params?.personName || 'Person' })}
-            />
-            <Stack.Screen
-              name="Biography"
-              component={BiographyScreen}
-              options={({ route }) => ({ title: route.params?.personName || 'Biography' })}
-            />
-            <Stack.Screen name="GraveQR" component={GraveQRScreen} options={{ title: 'QR code' }} />
-            <Stack.Screen
-              name="GraveRoute"
-              component={GraveRouteScreen}
-              options={{ title: 'Grave Route' }}
-            />
           </>
         ) : (
           <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ title: 'Happy Tree Family' }} />
