@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, Pressable, Switch, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '../lib/supabase';
+import { colors } from '../lib/theme';
 import { formatDateDisplay, toISODate, formatPersonMeta, isoToDate, askYesNo } from '../lib/personHelpers';
 
 
@@ -402,7 +402,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -420,7 +420,12 @@ export default function FamilyDetailScreen({ route, navigation }) {
             <Text style={styles.fabIcon}>+</Text>
           </Pressable>
         )}
-        <ScrollView ref={scrollRef} contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 + kbHeight }]} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 + kbHeight }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.list}>
             {people.length === 0 ? (
               <Text style={styles.emptyText}>No one added yet — add the first person below.</Text>
@@ -453,6 +458,11 @@ export default function FamilyDetailScreen({ route, navigation }) {
                   <Text style={styles.chevron}>›</Text>
                 </Pressable>
               ))
+            )}
+            {people.length > 0 && (
+              <Text style={{ textAlign: 'center', color: '#999', fontSize: 12, marginTop: 16, marginBottom: 8 }}>
+                That's everyone so far — tap + to add more
+              </Text>
             )}
           </View>
 
@@ -595,7 +605,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -633,12 +643,12 @@ const styles = StyleSheet.create({
   deleteButton: { borderColor: '#c0392b' },
   deleteText: { fontSize: 12, color: '#c0392b' },
   cancelText: { color: '#c0392b', marginBottom: 10 },
-  container: { flex: 1, padding: 20 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, paddingHorizontal: 20, backgroundColor: colors.background },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   scrollContent: { paddingBottom: 40 },
   list: { marginBottom: 10 },
-  personRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#C9A24B', alignItems: 'center', justifyContent: 'center' },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingRight: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  avatarCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#C9A24B', alignItems: 'center', justifyContent: 'center' },
   avatarInitial: { color: '#fff', fontWeight: '700', fontSize: 18 },
   memoryTag: { color: '#2F5D4E', fontSize: 11, fontStyle: 'italic', marginTop: 2 },
   chevron: { color: '#999', fontSize: 20 },
