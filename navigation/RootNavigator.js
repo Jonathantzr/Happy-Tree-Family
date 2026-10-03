@@ -11,6 +11,11 @@ import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 import TreeScreen from '../screens/TreeScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import ClaimScreen from '../screens/ClaimScreen';
+import RequestsScreen from '../screens/RequestsScreen';
+import RequestChangeScreen from '../screens/RequestChangeScreen';
+import { getMyProfile } from '../lib/profile';
 import PersonScreen from '../screens/PersonScreen';
 import BiographyScreen from '../screens/BiographyScreen';
 import GraveRouteScreen from '../screens/GraveRouteScreen';
@@ -73,6 +78,9 @@ function FamiliesStackScreen() {
         })}
       />
       <FamiliesStack.Screen name="Tree" component={TreeScreen} options={{ title: 'Family tree' }} />
+      <FamiliesStack.Screen name="Claim" component={ClaimScreen} options={{ title: 'Find yourself' }} />
+      <FamiliesStack.Screen name="Requests" component={RequestsScreen} options={{ title: 'Change requests' }} />
+      <FamiliesStack.Screen name="RequestChange" component={RequestChangeScreen} options={{ title: 'Request a change' }} />
       <FamiliesStack.Screen
         name="Person"
         component={PersonScreen}
@@ -138,6 +146,26 @@ function MainTabs() {
 export default function RootNavigator() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  // 'checking' | 'needed' (show "Tell us about you" first) | 'done'
+  const [profileState, setProfileState] = useState('checking');
+
+  const userId = session?.user?.id;
+  useEffect(() => {
+    if (!userId) {
+      setProfileState('checking');
+      return;
+    }
+    let cancelled = false;
+    getMyProfile().then((profile) => {
+      if (cancelled) return;
+      // If the profile can't be read (e.g. the Stage 5b database update hasn't
+      // been run yet), don't lock anyone out — just carry on into the app.
+      setProfileState(profile && !profile.profile_complete ? 'needed' : 'done');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     // Check if there's already a logged-in session (e.g. app was reopened)
@@ -156,7 +184,7 @@ export default function RootNavigator() {
     };
   }, []);
 
-  if (loading) {
+  if (loading || (session && profileState === 'checking')) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -167,9 +195,14 @@ export default function RootNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={headerOptions}>
-        {session ? (
+        {session && profileState === 'needed' ? (
+          <Stack.Screen name="ProfileSetup" options={{ title: 'Welcome' }}>
+            {(props) => <ProfileScreen {...props} onSaved={() => setProfileState('done')} />}
+          </Stack.Screen>
+        ) : session ? (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+            <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Your details' }} />
           </>
         ) : (
           <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />

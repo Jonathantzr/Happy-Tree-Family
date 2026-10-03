@@ -31,6 +31,9 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [pickExisting, setPickExisting] = useState(true);
   // true when the form was opened from a Person screen, so closing it goes back there
   const cameFromPerson = useRef(false);
+  const [meLinked, setMeLinked] = useState(true); // is your account linked to someone in this family?
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0); // change requests waiting (admins: all, members: yours)
     useEffect(() => {
     if (!route.params) return;
     const { openEdit, openRelative, openDelete } = route.params;
@@ -91,6 +94,18 @@ export default function FamilyDetailScreen({ route, navigation }) {
     } else {
       setRelationships([]);
     }
+
+    // "Which one is you?" and change-request reminders at the top of the list
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setMeLinked(data.some((p) => p.linked_user_id === user?.id));
+    const [{ data: fm }, { data: pending, error: pendingError }] = await Promise.all([
+      supabase.from('family_members').select('role').eq('family_id', familyId).eq('user_id', user?.id).maybeSingle(),
+      supabase.from('change_requests').select('id').eq('family_id', familyId).eq('status', 'pending'),
+    ]);
+    setIsAdmin(fm?.role === 'admin');
+    setPendingCount(pendingError ? 0 : (pending || []).length);
     setLoading(false);
   }
 
@@ -461,12 +476,46 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
   return (
     <Screen scrollRef={scrollRef} overlay={fab}>
+      {!meLinked && people.length > 0 ? (
+        <Pressable
+          style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('Claim', { familyId, familyName })}
+          accessibilityRole="button"
+        >
+          <Ionicons name="person-circle-outline" size={28} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>Which one is you?</Text>
+            <Text style={styles.bannerText}>Link your account to yourself so the tree can show how everyone is related to you.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+
+      {pendingCount > 0 ? (
+        <Pressable
+          style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('Requests', { familyId, familyName })}
+          accessibilityRole="button"
+        >
+          <Ionicons name="mail-unread-outline" size={26} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>
+              {isAdmin
+                ? `${pendingCount} change request${pendingCount === 1 ? '' : 's'} to review`
+                : `${pendingCount} of your requests ${pendingCount === 1 ? 'is' : 'are'} waiting`}
+            </Text>
+            <Text style={styles.bannerText}>{isAdmin ? 'Tap to approve or reject.' : 'A family admin will review it soon.'}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+
       {people.length === 0 ? (
         !formVisible && (
           <EmptyState
             icon="person-add-outline"
             title="No one added yet"
-            message="Tap the + button to add the first person — starting with yourself works well."
+            message="Tap the + button to add the first person."
           />
         )
       ) : (
@@ -668,6 +717,19 @@ const styles = StyleSheet.create({
   personMeta: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
   memoryTag: { color: colors.primary, fontSize: fontSize.xs, fontStyle: 'italic', marginTop: 2 },
   listHint: { textAlign: 'center', color: colors.textMuted, fontSize: fontSize.xs, marginTop: spacing.md },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  bannerTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold },
+  bannerText: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2, lineHeight: 19 },
   formCard: {
     marginTop: spacing.md,
     backgroundColor: colors.surface,

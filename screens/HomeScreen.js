@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable, RefreshCon
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { getMyProfile, addMeToFamily } from '../lib/profile';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
@@ -113,10 +114,19 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
+    // You're the first person in a new family — add you straight away, from
+    // your account details, so the tree starts with you.
+    const profile = await getMyProfile();
+    if (profile && profile.profile_complete) {
+      const { error: meError } = await addMeToFamily(family.id, profile);
+      if (meError) Alert.alert('Family created, but you were not added to it', meError.message);
+    }
+
     setFamilyName('');
     setSurnameCn('');
     setCreating(false);
     fetchFamilies();
+    navigation.navigate('FamilyDetail', { familyId: family.id, familyName: family.name });
   }
 
   async function handleJoinFamily() {
@@ -165,10 +175,11 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    Alert.alert('Joined!', `You've joined "${family.name}".`);
     setJoinCodeInput('');
     setJoining(false);
     fetchFamilies();
+    // next: find yourself among the people already in this family
+    navigation.navigate('Claim', { familyId: family.id, familyName: family.name });
   }
 
   async function copyCode(family) {

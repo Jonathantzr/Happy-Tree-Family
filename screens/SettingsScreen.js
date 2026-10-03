@@ -7,7 +7,7 @@ import { colors, spacing, fontSize, fontWeight, radius, touchTarget, shadow } fr
 import { useTranslation } from '../lib/i18n';
 import { supabase } from '../lib/supabase';
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }) {
   const { language, setLanguage, t } = useTranslation();
   const [email, setEmail] = useState('');
 
@@ -34,6 +34,20 @@ export default function SettingsScreen() {
           <Text style={styles.cardValue}>{email || '…'}</Text>
         </View>
       </View>
+      <Pressable
+        style={({ pressed }) => [styles.card, pressed && { opacity: 0.6 }]}
+        onPress={() => navigation.navigate('Profile')}
+        accessibilityRole="button"
+      >
+        <View style={styles.iconCircle}>
+          <Ionicons name="id-card-outline" size={20} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardValue}>Your details</Text>
+          <Text style={styles.cardLabel}>Name, birth date and gender</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+      </Pressable>
 
       <Text style={styles.sectionTitle}>{t('language')}</Text>
       <View style={styles.languageRow}>

@@ -7,7 +7,8 @@ import { supabase } from '../lib/supabase';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
 import Screen from '../components/Screen';
 import Avatar from '../components/Avatar';
-import { formatPersonMeta } from '../lib/personHelpers';
+import { formatPersonMeta, askYesNo } from '../lib/personHelpers';
+import { claimPerson, releasePerson } from '../lib/profile';
 import { buildGraph, describeRelation, relationText } from '../lib/relationships';
 
 function personLabel(p) {
@@ -164,7 +165,37 @@ export default function PersonScreen({ route, navigation }) {
   // How this person relates to whoever is looking at the screen, at any
   // distance (e.g. "Your great-grandmother · dad's side") — worked out in
   // lib/relationships.js, the same helper the family tree uses.
-  const relationToViewer = relationText(describeRelation(buildGraph(people, relationships), selfPersonId, person.id));
+  const isMe = person.id === selfPersonId;
+  const relationToViewer = isMe
+    ? 'This is you'
+    : relationText(describeRelation(buildGraph(people, relationships), selfPersonId, person.id));
+
+  // "This is me": only offered when you aren't linked to anyone in this family
+  // yet and nobody else is linked to this person.
+  const canClaim = !selfPersonId && !person.linked_user_id && !person.is_deceased;
+
+  async function handleClaim() {
+    setMenuOpen(false);
+    const yes = await askYesNo('Is this you?', `Your account will be linked to ${personLabel(person)} in ${familyName}.`);
+    if (!yes) return;
+    const { error } = await claimPerson(person.id);
+    if (error) Alert.alert('Could not link you', error.message);
+    loadEverything();
+  }
+
+  async function handleRelease() {
+    setMenuOpen(false);
+    const yes = await askYesNo('Not you?', `Your account will be unlinked from ${personLabel(person)}. You can link yourself to the right person afterwards.`);
+    if (!yes) return;
+    const { error } = await releasePerson(person.id);
+    if (error) Alert.alert('Could not unlink', error.message);
+    loadEverything();
+  }
+
+  function goRequestChange() {
+    setMenuOpen(false);
+    navigation.navigate('RequestChange', { familyId, personId: person.id });
+  }
 
   const canShowGraveActions = person.is_deceased;
   const canShowQR = isAdmin && person.is_deceased;
@@ -323,10 +354,30 @@ export default function PersonScreen({ route, navigation }) {
         <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <Pressable style={[styles.menuSheet, { paddingBottom: insets.bottom + spacing.sm }]} onPress={() => {}}>
             <Text style={styles.menuTitle} numberOfLines={1}>{personLabel(person)}</Text>
-            <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goEdit}>
-              <Ionicons name="create-outline" size={20} color={colors.text} />
-              <Text style={styles.menuItemText}>Edit details</Text>
-            </Pressable>
+            {isMe && !isAdmin ? (
+              // your own entry is kept by the family: members ask an admin to change it
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goRequestChange}>
+                <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+                <Text style={styles.menuItemText}>Request a change</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goEdit}>
+                <Ionicons name="create-outline" size={20} color={colors.text} />
+                <Text style={styles.menuItemText}>Edit details</Text>
+              </Pressable>
+            )}
+            {canClaim ? (
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={handleClaim}>
+                <Ionicons name="person-circle-outline" size={20} color={colors.text} />
+                <Text style={styles.menuItemText}>This is me</Text>
+              </Pressable>
+            ) : null}
+            {isMe ? (
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={handleRelease}>
+                <Ionicons name="unlink-outline" size={20} color={colors.text} />
+                <Text style={styles.menuItemText}>This isn't me</Text>
+              </Pressable>
+            ) : null}
             <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={handleDelete}>
               <Ionicons name="trash-outline" size={20} color={colors.danger} />
               <Text style={[styles.menuItemText, styles.menuItemDanger]}>Delete this person</Text>
