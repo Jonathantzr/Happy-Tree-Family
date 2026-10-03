@@ -218,6 +218,42 @@ export default function FamilyDetailScreen({ route, navigation }) {
     );
   }
 
+  // Auto-linking: a normal family is assumed, so the obvious second parent is
+  // linked without asking. The app only asks when it genuinely can't tell
+  // (someone with more than one spouse). Anything wrong — divorce, adoption,
+  // step-children — can be undone with "remove link" in the Edit form.
+
+  // Which spouses of parentId should also become parents of childId.
+  // alreadyParents = the child's parents not counting parentId.
+  async function coParentIds(parentId, childId, childName, alreadyParents) {
+    if (alreadyParents.length >= 1) return []; // already has its other parent
+    const spouses = spouseIdsOf(parentId).filter((s) => s !== childId);
+    if (spouses.length === 1) return spouses;
+    const picked = [];
+    for (const spouseId of spouses) {
+      const yes = await askYesNo('Which parent?', `${labelById(parentId)} has more than one spouse. Is ${labelById(spouseId)} a parent of ${childName}?`);
+      if (yes) picked.push(spouseId);
+    }
+    return picked;
+  }
+
+  // When two people become spouses, the new spouse also becomes a parent of
+  // any children who so far have only one parent. Returns the 'parent' links to save.
+  async function sharedChildRows(parentId, spouseId, spouseName) {
+    const kids = childIdsOf(parentId).filter((kid) => {
+      const kidParents = parentIdsOf(kid);
+      return !kidParents.includes(spouseId) && kidParents.length < 2;
+    });
+    if (kids.length === 0) return [];
+    let yes = true;
+    if (spouseIdsOf(parentId).some((s) => s !== spouseId)) {
+      const names = kids.map((kid) => labelById(kid));
+      const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+      yes = await askYesNo('Also a parent?', `${labelById(parentId)} has more than one spouse. Is ${spouseName} a parent of ${list}?`);
+    }
+    return yes ? kids.map((kid) => ({ person_id: kid, related_person_id: spouseId, relation_type: 'parent' })) : [];
+  }
+
   async function linkExisting(other) {
     const kind = formMode.kind;
     const target = formMode.person;
@@ -239,28 +275,23 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
     if (kind === 'parent') {
       rows = [row(target.id, other.id)];
-      for (const spouseId of spouseIdsOf(other.id)) {
-        if (spouseId === target.id || parentIdsOf(target.id).includes(spouseId)) continue;
-        const yes = await askYesNo(
-          'Also link the spouse?',
-          `${personLabel(other)} is married to ${labelById(spouseId)}. Is ${labelById(spouseId)} also a parent of ${personLabel(target)}?`
-        );
-        if (yes) rows.push(row(target.id, spouseId));
-      }
+      const extra = await coParentIds(other.id, target.id, personLabel(target), parentIdsOf(target.id).filter((p) => p !== other.id));
+      extra.forEach((spouseId) => rows.push(row(target.id, spouseId)));
     } else if (kind === 'spouse') {
       if (spouseIdsOf(target.id).includes(other.id)) {
         Alert.alert('Already linked', 'These two are already spouses.');
         setSaving(false);
         return;
       }
-      rows = [row(target.id, other.id, 'spouse')];
+      rows = [
+        row(target.id, other.id, 'spouse'),
+        ...(await sharedChildRows(target.id, other.id, personLabel(other))),
+        ...(await sharedChildRows(other.id, target.id, personLabel(target))),
+      ];
     } else if (kind === 'child') {
       rows = [row(other.id, target.id)];
-      for (const spouseId of spouseIdsOf(target.id)) {
-        if (spouseId === other.id) continue;
-        const yes = await askYesNo('Also link to spouse?', `Is ${labelById(spouseId)} also a parent of ${personLabel(other)}?`);
-        if (yes) rows.push(row(other.id, spouseId));
-      }
+      const extra = await coParentIds(target.id, other.id, personLabel(other), parentIdsOf(other.id).filter((p) => p !== target.id));
+      extra.forEach((spouseId) => rows.push(row(other.id, spouseId)));
     } else if (kind === 'sibling') {
       const targetParents = parentIdsOf(target.id);
       const otherParents = parentIdsOf(other.id);
@@ -337,13 +368,10 @@ export default function FamilyDetailScreen({ route, navigation }) {
     // --- ADD a new person (plain, or as a relative) ---
     const target = formMode ? formMode.person : null;
 
-    // For + Child: ask about the spouse BEFORE saving
-    const extraParentIds = [];
+    // For + Child: work out the other parent BEFORE saving (only asks if unclear)
+    let extraParentIds = [];
     if (formMode && formMode.kind === 'child') {
-      for (const spouseId of spouseIdsOf(target.id)) {
-        const yes = await askYesNo('Also link to spouse?', `Is ${labelById(spouseId)} also a parent of this child?`);
-        if (yes) extraParentIds.push(spouseId);
-      }
+      extraParentIds = await coParentIds(target.id, null, name.trim(), []);
     }
 
     const { data: newPerson, error } = await supabase
@@ -364,7 +392,10 @@ export default function FamilyDetailScreen({ route, navigation }) {
       if (kind === 'parent') {
         rows = [{ person_id: target.id, related_person_id: newPerson.id, relation_type: 'parent' }];
       } else if (kind === 'spouse') {
-        rows = [{ person_id: target.id, related_person_id: newPerson.id, relation_type: 'spouse' }];
+        rows = [
+          { person_id: target.id, related_person_id: newPerson.id, relation_type: 'spouse' },
+          ...(await sharedChildRows(target.id, newPerson.id, personLabel(newPerson))),
+        ];
       } else if (kind === 'child') {
         rows = [target.id, ...extraParentIds].map((pid) => ({ person_id: newPerson.id, related_person_id: pid, relation_type: 'parent' }));
       } else if (kind === 'sibling') {

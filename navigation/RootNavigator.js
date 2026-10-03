@@ -10,6 +10,7 @@ import WelcomeScreen from '../screens/WelcomeScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
+import TreeScreen from '../screens/TreeScreen';
 import PersonScreen from '../screens/PersonScreen';
 import BiographyScreen from '../screens/BiographyScreen';
 import GraveRouteScreen from '../screens/GraveRouteScreen';
@@ -50,8 +51,28 @@ function FamiliesStackScreen() {
       <FamiliesStack.Screen
         name="FamilyDetail"
         component={FamilyDetailScreen}
-        options={({ route }) => ({ title: route.params?.familyName || 'Family' })}
+        options={({ route, navigation }) => ({
+          title: route.params?.familyName || 'Family',
+          headerRight: () => (
+            <Pressable
+              onPress={() =>
+                navigation.navigate('Tree', {
+                  familyId: route.params?.familyId,
+                  familyName: route.params?.familyName,
+                })
+              }
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Open the family tree"
+              style={{ minHeight: touchTarget - 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            >
+              <Ionicons name="git-network-outline" size={18} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium }}>Tree</Text>
+            </Pressable>
+          ),
+        })}
       />
+      <FamiliesStack.Screen name="Tree" component={TreeScreen} options={{ title: 'Family tree' }} />
       <FamiliesStack.Screen
         name="Person"
         component={PersonScreen}

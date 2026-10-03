@@ -8,6 +8,7 @@ import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } fr
 import Screen from '../components/Screen';
 import Avatar from '../components/Avatar';
 import { formatPersonMeta } from '../lib/personHelpers';
+import { buildGraph, describeRelation, relationText } from '../lib/relationships';
 
 function personLabel(p) {
   return p?.name_en || p?.name_pinyin || p?.name_cn || '(no name)';
@@ -160,30 +161,10 @@ export default function PersonScreen({ route, navigation }) {
     if (p) addRelative(p, genderWord(p, 'Son', 'Daughter', 'Child'));
   });
 
-  // How this person relates to whoever is looking at the screen. Covers direct
-  // relations, grandparent/grandchild, aunt/uncle/niece/nephew and in-laws;
-  // anything further just says "Relative" for now (full multi-generation
-  // labels like "great-grandmother" are Stage 5 tree work).
-  let relationToViewer = null;
-  if (selfPersonId && selfPersonId !== person.id) {
-    if (parentIdsOf(selfPersonId).includes(person.id)) relationToViewer = genderWord(person, 'Father', 'Mother', 'Parent');
-    else if (childIdsOf(selfPersonId).includes(person.id)) relationToViewer = genderWord(person, 'Son', 'Daughter', 'Child');
-    else if (spouseIdsOf(selfPersonId).includes(person.id)) relationToViewer = genderWord(person, 'Husband', 'Wife', 'Spouse');
-    else if (siblingIdsOf(selfPersonId).includes(person.id)) relationToViewer = genderWord(person, 'Brother', 'Sister', 'Sibling');
-    else {
-      const grandparentIds = parentIdsOf(selfPersonId).flatMap((pid) => parentIdsOf(pid));
-      const grandchildIds = childIdsOf(selfPersonId).flatMap((cid) => childIdsOf(cid));
-      const auntUncleIds = parentIdsOf(selfPersonId).flatMap((pid) => siblingIdsOf(pid));
-      const nieceNephewIds = siblingIdsOf(selfPersonId).flatMap((sid) => childIdsOf(sid));
-      const inLawParentIds = spouseIdsOf(selfPersonId).flatMap((sp) => parentIdsOf(sp));
-      if (grandparentIds.includes(person.id)) relationToViewer = genderWord(person, 'Grandfather', 'Grandmother', 'Grandparent');
-      else if (grandchildIds.includes(person.id)) relationToViewer = genderWord(person, 'Grandson', 'Granddaughter', 'Grandchild');
-      else if (auntUncleIds.includes(person.id)) relationToViewer = genderWord(person, 'Uncle', 'Aunt', 'Aunt/Uncle');
-      else if (nieceNephewIds.includes(person.id)) relationToViewer = genderWord(person, 'Nephew', 'Niece', 'Niece/Nephew');
-      else if (inLawParentIds.includes(person.id)) relationToViewer = genderWord(person, 'Father-in-law', 'Mother-in-law', 'Parent-in-law');
-      else relationToViewer = 'Relative';
-    }
-  }
+  // How this person relates to whoever is looking at the screen, at any
+  // distance (e.g. "Your great-grandmother · dad's side") — worked out in
+  // lib/relationships.js, the same helper the family tree uses.
+  const relationToViewer = relationText(describeRelation(buildGraph(people, relationships), selfPersonId, person.id));
 
   const canShowGraveActions = person.is_deceased;
   const canShowQR = isAdmin && person.is_deceased;
@@ -223,7 +204,15 @@ export default function PersonScreen({ route, navigation }) {
 
   const goTo = (screen) => navigation.navigate(screen, { personId: person.id, personName: personLabel(person) });
 
-  const tiles = [{ key: 'story', label: 'Story', icon: 'book-outline', onPress: () => goTo('Biography') }];
+  const tiles = [
+    { key: 'story', label: 'Story', icon: 'book-outline', onPress: () => goTo('Biography') },
+    {
+      key: 'tree',
+      label: 'Tree',
+      icon: 'git-network-outline',
+      onPress: () => navigation.navigate('Tree', { familyId, familyName, focusPersonId: person.id }),
+    },
+  ];
   if (canShowGraveActions && !grave) {
     tiles.push({ key: 'directions', label: 'Add directions', icon: 'map-outline', onPress: () => goTo('GraveRoute') });
   }
@@ -248,7 +237,7 @@ export default function PersonScreen({ route, navigation }) {
         {person.is_deceased ? <Text style={styles.memoryTag}>In memory</Text> : null}
         {relationToViewer ? (
           <View style={styles.relationPill}>
-            <Text style={styles.relationPillText}>Your {relationToViewer.toLowerCase()}</Text>
+            <Text style={styles.relationPillText}>{relationToViewer}</Text>
           </View>
         ) : null}
       </View>
