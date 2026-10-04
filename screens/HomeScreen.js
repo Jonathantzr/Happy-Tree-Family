@@ -145,32 +145,20 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    const { data: family, error: findError } = await supabase
-      .from('families')
-      .select('id, name')
-      .eq('join_code', code)
-      .single();
+    // The database checks the code and adds you in one step (join_family in
+    // supabase/stage5f-lock-down-tables.sql) — people who aren't members yet
+    // are not allowed to look families up directly.
+    const { data: joined, error: joinError } = await supabase.rpc('join_family', { p_code: code });
+    const result = Array.isArray(joined) ? joined[0] : joined;
 
-    if (findError || !family) {
-      Alert.alert('Family not found', 'Double check the code and try again.');
+    if (joinError || !result) {
+      Alert.alert('Could not join', joinError?.message || 'Double check the code and try again.');
       setJoining(false);
       return;
     }
-
-    const { error: joinError } = await supabase
-      .from('family_members')
-      .insert({
-        family_id: family.id,
-        user_id: user.id,
-        role: 'member',
-      });
-
-    if (joinError) {
-      if (joinError.code === '23505') {
-        Alert.alert('Already a member', `You're already part of "${family.name}".`);
-      } else {
-        Alert.alert('Error joining family', joinError.message);
-      }
+    const family = { id: result.family_id, name: result.family_name };
+    if (result.already_member) {
+      Alert.alert('Already a member', `You're already part of "${family.name}".`);
       setJoining(false);
       return;
     }
