@@ -20,7 +20,7 @@ Development is now done with **Claude Code inside VS Code** (since Stage 4.5f). 
 2. Claude makes the code changes directly; the owner tests on an Android phone through Expo Go and reports back with screenshots. Claude cannot see the phone — always say plainly what has NOT been tested on a device.
 3. Explain like I'm 5: plain words, numbered steps, exact names of buttons and files.
 4. For bigger design choices, give a recommendation and ask before building. The owner's suggestions are ideas, not exact wording to copy.
-5. Database changes: write a file in  and tell the owner to paste it into Supabase → SQL Editor → Run. Claude only has the app's public key and cannot see the database's functions or rules — when it needs to look at something, it gives the owner a query to run and paste back. Never ask for the database password or secret key.
+5. Database changes: write a file in `supabase/` and tell the owner to paste it into Supabase → SQL Editor → Run. Claude only has the app's public key and cannot see the database's functions or rules — when it needs to look at something, it gives the owner a query to run and paste back. Never ask for the database password or secret key.
 6. Commit and push only when the owner says so.
 7. Keep this guide updated (checklist + "CURRENT CODEBASE STATE") as part of every stage.
 8. Every screen must follow the "DEVICE COMPATIBILITY & USABILITY RULES" section below, and every stage's test list must include those checks.
