@@ -162,7 +162,7 @@ export default function BiographyScreen({ route }) {
             label="Hometown"
             value={hometown}
             onChangeText={setHometown}
-            placeholder="e.g. Segamat, Johor"
+            placeholder="e.g. Ipoh, Perak"
             autoCapitalize="words"
             returnKeyType="next"
           />

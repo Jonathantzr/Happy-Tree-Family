@@ -81,7 +81,7 @@ export default function ProfileScreen({ navigation, onSaved }) {
 
       <TextField
         label="Your name"
-        placeholder="e.g. Tan Zhi Ren"
+        placeholder="e.g. Lee Wen Ming"
         value={name}
         onChangeText={setName}
         autoCapitalize="words"

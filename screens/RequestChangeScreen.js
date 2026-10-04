@@ -9,6 +9,7 @@ import AppButton from '../components/AppButton';
 import TextField from '../components/TextField';
 import DateField from '../components/DateField';
 import GenderPicker from '../components/GenderPicker';
+import CharacterFinder from '../components/CharacterFinder';
 
 // For members who want their own entry in the family changed: fill in what
 // it should say, and a family admin approves or rejects it.
@@ -18,6 +19,7 @@ export default function RequestChangeScreen({ route, navigation }) {
   const [sending, setSending] = useState(false);
   const [person, setPerson] = useState(null);
   const [name, setName] = useState('');
+  const [nameCn, setNameCn] = useState('');
   const [birthDate, setBirthDate] = useState(null);
   const [gender, setGender] = useState(null);
   const [note, setNote] = useState('');
@@ -32,6 +34,7 @@ export default function RequestChangeScreen({ route, navigation }) {
         if (data) {
           setPerson(data);
           setName(data.name_en || data.name_pinyin || data.name_cn || '');
+          setNameCn(data.name_en || data.name_pinyin ? data.name_cn || '' : '');
           setBirthDate(isoToDate(data.birth_date));
           setGender(data.gender || null);
         }
@@ -43,6 +46,8 @@ export default function RequestChangeScreen({ route, navigation }) {
     const changes = {};
     const currentName = person.name_en || person.name_pinyin || person.name_cn || '';
     if (name.trim() && name.trim() !== currentName) changes.name_en = name.trim();
+    // same optional Chinese name as the admins' add/edit form (PersonFormScreen)
+    if ((nameCn.trim() || null) !== (person.name_cn || null)) changes.name_cn = nameCn.trim() || null;
     const iso = toISODate(birthDate);
     if (iso !== (person.birth_date || null)) changes.birth_date = iso;
     if ((gender || null) !== (person.gender || null)) changes.gender = gender;
@@ -82,11 +87,21 @@ export default function RequestChangeScreen({ route, navigation }) {
   }
 
   return (
-    <Screen>
+    <Screen keyboardAvoiding>
       <Text style={styles.intro}>
         Change what you'd like your entry to say. A family admin will approve or reject the change.
       </Text>
       <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" returnKeyType="next" />
+      <TextField
+        label="Chinese name (optional)"
+        placeholder="e.g. 李文明"
+        value={nameCn}
+        onChangeText={setNameCn}
+        autoCorrect={false}
+        returnKeyType="done"
+        style={{ marginBottom: spacing.sm }}
+      />
+      <CharacterFinder suggestFrom={name} onPick={(char) => setNameCn((old) => old + char)} />
       <DateField label="Birth date" placeholder="Tap to pick a date" value={birthDate} onChange={setBirthDate} />
       <GenderPicker value={gender} onChange={setGender} />
       <TextField

@@ -10,6 +10,7 @@ import Avatar from '../components/Avatar';
 import { formatPersonMeta, askYesNo } from '../lib/personHelpers';
 import { claimPerson, releasePerson } from '../lib/profile';
 import { buildGraph, describeRelation, relationText } from '../lib/relationships';
+import { loadNameBook, lineGenerations, childIndexOf, characterAt, characterText, usesCharacter, isChinese } from '../lib/nameBook';
 
 function personLabel(p) {
   return p?.name_en || p?.name_pinyin || p?.name_cn || '(no name)';
@@ -26,6 +27,7 @@ export default function PersonScreen({ route, navigation }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [selfPersonId, setSelfPersonId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [nameBook, setNameBook] = useState({ book: null, entries: [] });
   const insets = useSafeAreaInsets();
 
   const loadEverything = useCallback(async () => {
@@ -62,6 +64,7 @@ export default function PersonScreen({ route, navigation }) {
       .maybeSingle();
     setGrave(graveData || null);
     setStepCount(graveData?.route_steps?.[0]?.count || 0);
+    setNameBook(await loadNameBook(familyId));
 
     const {
       data: { user },
@@ -166,9 +169,24 @@ export default function PersonScreen({ route, navigation }) {
   // distance (e.g. "Your great-grandmother · dad's side") — worked out in
   // lib/relationships.js, the same helper the family tree uses.
   const isMe = person.id === selfPersonId;
-  const relationToViewer = isMe
-    ? 'This is you'
-    : relationText(describeRelation(buildGraph(people, relationships), selfPersonId, person.id));
+  const graph = buildGraph(people, relationships);
+  const relationToViewer = isMe ? 'This is you' : relationText(describeRelation(graph, selfPersonId, person.id));
+
+  // Generation name book: this person's character and their children's, when
+  // the family's poem reaches them (father's line only — see lib/nameBook.js).
+  const nameLine = nameBook.entries.length ? lineGenerations(graph, nameBook.book) : new Map();
+  const ownChar = characterAt(nameBook.entries, nameLine.has(person.id) ? nameLine.get(person.id) : null);
+  const childChar = characterAt(nameBook.entries, childIndexOf(graph, nameLine, person.id));
+  const usesOwn = usesCharacter(person, ownChar.entry);
+  const nameLines = [];
+  if (ownChar.status === 'ok') {
+    nameLines.push(
+      `Generation name: ${characterText(ownChar.entry)}` +
+        (usesOwn === true ? ' ✓' : usesOwn === false ? ` — their Chinese name (${person.name_cn}) is different` : '')
+    );
+  }
+  if (childChar.status === 'ok') nameLines.push(`Children's generation name: ${characterText(childChar.entry)}`);
+  else if (childChar.status === 'after') nameLines.push("Children's generation name: not known yet");
   // "This is me": only offered when you aren't linked to anyone in this family
   // yet and nobody else is linked to this person.
   const canClaim = !selfPersonId && !person.linked_user_id && !person.is_deceased;
@@ -306,6 +324,29 @@ export default function PersonScreen({ route, navigation }) {
         </Pressable>
       ) : null}
 
+      {nameLines.length ? (
+        <Pressable
+          style={({ pressed }) => [styles.graveCard, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('NameBook', { familyId, familyName })}
+          accessibilityRole="button"
+        >
+          <View style={styles.graveIcon}>
+            {isChinese((ownChar.entry || childChar.entry)?.character_cn) ? (
+              <Text style={styles.nameChar}>{(ownChar.entry || childChar.entry).character_cn}</Text>
+            ) : (
+              <Ionicons name="book-outline" size={20} color={colors.primary} />
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.graveCardLabel}>Family name book</Text>
+            {nameLines.map((text) => (
+              <Text key={text} style={styles.nameLine}>{text}</Text>
+            ))}
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+
       <Text style={styles.sectionHeading}>Family</Text>
       {relatives.length === 0 ? (
         <Text style={styles.emptyText}>No relatives linked yet — add one below.</Text>
@@ -421,6 +462,8 @@ const styles = StyleSheet.create({
   graveCardLabel: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: 2 },
   graveCemetery: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
   graveSteps: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
+  nameChar: { color: colors.primary, fontSize: fontSize.lg, fontWeight: fontWeight.medium },
+  nameLine: { color: colors.text, fontSize: fontSize.sm, lineHeight: 20 },
   sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.lg, marginBottom: spacing.sm },
   emptyText: { color: colors.textMuted, fontSize: fontSize.sm },
   listCard: { ...card },

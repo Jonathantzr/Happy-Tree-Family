@@ -247,7 +247,7 @@ export default function HomeScreen({ navigation }) {
       <View style={[styles.card, styles.formCard]}>
         <TextField
           label="Family name"
-          placeholder="e.g. Tan Family - Segamat"
+          placeholder="e.g. Lee Family - Ipoh"
           value={familyName}
           onChangeText={setFamilyName}
           autoCapitalize="words"
@@ -255,7 +255,7 @@ export default function HomeScreen({ navigation }) {
         />
         <TextField
           label="Chinese surname (optional)"
-          placeholder="e.g. 陈"
+          placeholder="e.g. 李"
           value={surnameCn}
           onChangeText={setSurnameCn}
           returnKeyType="done"

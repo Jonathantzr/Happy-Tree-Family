@@ -196,7 +196,7 @@ export default function GraveRouteScreen({ route }) {
           </Text>
           <TextField
             label="Cemetery name"
-            placeholder="e.g. Segamat Chinese Cemetery"
+            placeholder="e.g. Ipoh Chinese Cemetery"
             value={graveForm.cemetery_name}
             autoCapitalize="words"
             onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_name: t })}

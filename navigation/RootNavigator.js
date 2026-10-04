@@ -11,6 +11,7 @@ import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 import TreeScreen from '../screens/TreeScreen';
+import NameBookScreen from '../screens/NameBookScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ClaimScreen from '../screens/ClaimScreen';
 import PersonFormScreen from '../screens/PersonFormScreen';
@@ -60,25 +61,43 @@ function FamiliesStackScreen() {
         options={({ route, navigation }) => ({
           title: route.params?.familyName || 'Family',
           headerRight: () => (
-            <Pressable
-              onPress={() =>
-                navigation.navigate('Tree', {
-                  familyId: route.params?.familyId,
-                  familyName: route.params?.familyName,
-                })
-              }
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Open the family tree"
-              style={{ minHeight: touchTarget - 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-            >
-              <Ionicons name="git-network-outline" size={18} color={colors.primary} />
-              <Text style={{ color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium }}>Tree</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Pressable
+                onPress={() =>
+                  navigation.navigate('NameBook', {
+                    familyId: route.params?.familyId,
+                    familyName: route.params?.familyName,
+                  })
+                }
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Open the generation name book"
+                style={{ minHeight: touchTarget - 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              >
+                <Ionicons name="book-outline" size={18} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium }}>Names</Text>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  navigation.navigate('Tree', {
+                    familyId: route.params?.familyId,
+                    familyName: route.params?.familyName,
+                  })
+                }
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Open the family tree"
+                style={{ minHeight: touchTarget - 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              >
+                <Ionicons name="git-network-outline" size={18} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium }}>Tree</Text>
+              </Pressable>
+            </View>
           ),
         })}
       />
       <FamiliesStack.Screen name="Tree" component={TreeScreen} options={{ title: 'Family tree' }} />
+      <FamiliesStack.Screen name="NameBook" component={NameBookScreen} options={{ title: 'Name book' }} />
       <FamiliesStack.Screen name="Claim" component={ClaimScreen} options={{ title: 'Join the family tree' }} />
       <FamiliesStack.Screen
         name="PersonForm"

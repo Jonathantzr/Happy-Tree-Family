@@ -1,12 +1,14 @@
 import { useState, useCallback, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
-import { View, Text, Pressable, ActivityIndicator, Alert, StyleSheet, Animated, PanResponder } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, Alert, StyleSheet, Animated, PanResponder, ScrollView, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
 import { buildGraph, describeRelation, relationText, explainRelation } from '../lib/relationships';
-import { layoutTree, familyView, NODE_W, NODE_H, TOGGLE_SIZE } from '../lib/treeLayout';
+import { layoutTree, familyView, everyoneView, NODE_W, NODE_H, TOGGLE_SIZE } from '../lib/treeLayout';
 import { formatPersonMeta } from '../lib/personHelpers';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
@@ -16,9 +18,7 @@ import EmptyState from '../components/EmptyState';
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2;
 const PHOTO_SIZE = 72;
-const HANDLE_W = 124; // "▲ Dad's side" button above a person
-const HANDLE_H = 28;
-const CLOSER_W = 72; // "Hide" button under parents that were opened
+const TAG_H = 24; // the small "▲ Family +6" / "▼ Hide" tag on the top edge of a person's box
 const PATH_W = 6; // thickness of the gold "how we're related" line
 const PHOTOS_SETTING_KEY = 'tree.showPhotos'; // remembers names vs pictures on this phone
 const NO_FOLDS = new Set();
@@ -54,7 +54,9 @@ function clampZoom(s) {
 // - "my family" (default): starts with one person's immediate family — you,
 //   unless opened from someone's Person screen. "▲ Dad's side" / "▲ Mum's side"
 //   buttons open each side upwards, dad's family on the left, mum's on the right.
-// - "everyone": the whole family at once, with fold buttons under each couple.
+// - "everyone": your whole family at once (blood relatives on both sides and who
+//   they married), with fold buttons under each couple. A husband's/wife's own
+//   family stays folded behind a "▲ …'s family" button on their box.
 export default function TreeScreen({ route, navigation }) {
   const { familyId, familyName, focusPersonId } = route.params;
 
@@ -75,6 +77,39 @@ export default function TreeScreen({ route, navigation }) {
   const [collapsed, setCollapsed] = useState(() => new Set()); // folded branches in "everyone"
   const [showSteps, setShowSteps] = useState(false);
   const [freshView, setFreshView] = useState(0); // bumped to re-show the starting view
+
+  // ---- turning the phone sideways ----
+  // The tree is the one screen that works sideways (a wide row of brothers,
+  // sisters and cousins fits much better). While it is open the phone may
+  // rotate; leaving it puts the app upright again. The toolbar button turns
+  // it for people who keep their phone's auto-rotate switched off.
+  const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
+  const landscape = window.width > window.height;
+
+  useFocusEffect(
+    useCallback(() => {
+      ScreenOrientation.unlockAsync().catch(() => {});
+      return () => {
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      };
+    }, [])
+  );
+
+  function turnScreen() {
+    const lock = landscape ? ScreenOrientation.OrientationLock.PORTRAIT_UP : ScreenOrientation.OrientationLock.LANDSCAPE;
+    ScreenOrientation.lockAsync(lock).catch(() => {});
+  }
+
+  // Sideways there is little height, so the bottom tab bar steps aside.
+  useFocusEffect(
+    useCallback(() => {
+      const tabs = navigation.getParent();
+      const normal = { backgroundColor: colors.surface, borderTopColor: colors.border };
+      tabs?.setOptions({ tabBarStyle: landscape ? { display: 'none' } : normal });
+      return () => tabs?.setOptions({ tabBarStyle: normal });
+    }, [navigation, landscape])
+  );
 
   useEffect(() => {
     AsyncStorage.getItem(PHOTOS_SETTING_KEY)
@@ -146,16 +181,21 @@ export default function TreeScreen({ route, navigation }) {
   // whose immediate family the "my family" view starts from
   const centre = [centreId, selfPersonId, people[0]?.id].find((id) => id && graph.byId.has(id)) || null;
 
+  // whose family the "everyone" view is drawn around
+  const everyoneAnchor = selfPersonId || centre;
+
   const view$ = useMemo(() => {
-    if (mode !== 'family' || !centre) return null;
-    return familyView(graph, centre, openIds);
-  }, [mode, graph, centre, openIds]);
+    if (!centre) return null;
+    return mode === 'family' ? familyView(graph, centre, openIds) : everyoneView(graph, everyoneAnchor, openIds);
+  }, [mode, graph, centre, everyoneAnchor, openIds]);
 
   const layout = useMemo(() => {
-    if (!view$) return layoutTree(people, graph, collapsed, { anchorId: selfPersonId || centre });
+    if (!view$) return layoutTree(people, graph, collapsed, { anchorId: everyoneAnchor });
     const shown = people.filter((p) => view$.visible.has(p.id));
-    return layoutTree(shown, buildGraph(shown, relationships), NO_FOLDS, { anchorId: centre });
-  }, [view$, people, graph, relationships, collapsed, selfPersonId, centre]);
+    return mode === 'family'
+      ? layoutTree(shown, buildGraph(shown, relationships), NO_FOLDS, { anchorId: centre })
+      : layoutTree(shown, buildGraph(shown, relationships), collapsed, { anchorId: everyoneAnchor });
+  }, [view$, mode, people, graph, relationships, collapsed, everyoneAnchor, centre]);
 
   // ---- moving and zooming the drawing ----
   // view = where the drawing sits: s is the zoom, tx/ty is where its top-left
@@ -371,33 +411,53 @@ export default function TreeScreen({ route, navigation }) {
   const pair = picked.length === 2 ? picked : null;
   const selectedRelation = selected ? describeRelation(graph, selfPersonId, selected.id) : null;
 
-  // "▲ Dad's side" buttons and "Hide" buttons, in drawing coordinates
+  // In both views, each opened family of someone who married in gets its own colour — its lines,
+  // its people's box edges and its "Hide family" button — so it can be followed
+  // by eye. Colours follow the drawing, left to right (see below).
+  // Colours are handed out left to right across the drawing, not in the order
+  // of opening: that way two families drawn side by side never share a colour
+  // (the same colour only comes round again six families along).
+  const familyLeft = new Map(); // opener -> x of the leftmost box of the family they opened
+  view$?.familyOf?.forEach((opener, id) => {
+    const at = layout.pos[id];
+    if (at) familyLeft.set(opener, Math.min(familyLeft.get(opener) ?? Infinity, at.x));
+  });
+  const openedFamilies = [...new Set(view$?.familyOf ? view$.familyOf.values() : [])].sort(
+    (a, b) => (familyLeft.get(a) ?? Infinity) - (familyLeft.get(b) ?? Infinity)
+  );
+  const colourOfFamily = (openerId) => {
+    const at = openedFamilies.indexOf(openerId);
+    return at < 0 ? null : colors.familyLines[at % colors.familyLines.length];
+  };
+  const familyColour = (ids) => {
+    const member = (ids || []).find((id) => view$?.familyOf?.has(id));
+    return member ? colourOfFamily(view$.familyOf.get(member)) : null;
+  };
+  // coloured lines are drawn last so they sit on top where lines cross
+  const drawnLines = layout.lines.map((l) => ({ ...l, colour: familyColour(l.ids) })).sort((a, b) => (a.colour ? 1 : 0) - (b.colour ? 1 : 0));
+
+  // ---- the tags that open and hide a side of the family ----
+  // ONE look in both views ("My family" and "Everyone"): a small tag sitting on
+  // the top edge of the person's box — "▲ Dad's side +5", "▲ Family +6" —
+  // which turns into "▼ Hide" once that side is open. It sits ON the box, never
+  // above it: the space above a box belongs to the tree's lines, and a button
+  // there hid them and made it unclear who the person is joined to.
   const centreParents = centre ? graph.parentsOf(centre) : [];
-  const handles = (view$?.handles || [])
+  const handles = [...(view$?.handles || []), ...(view$?.closers || []).map((c) => ({ personId: c.personId, open: true }))]
     .filter((h) => layout.pos[h.personId])
     .map((h) => {
       const p = graph.byId.get(h.personId);
       const at = layout.pos[h.personId];
-      let label = `${firstName(p)}'s side`;
-      if (centreParents.includes(h.personId)) {
-        if (p.gender === 'M') label = "Dad's side";
-        else if (p.gender === 'F') label = "Mum's side";
-      } else if (graph.spousesOf(centre).includes(h.personId)) {
-        label = `${firstName(p)}'s family`;
+      let label = 'Family'; // a husband's or wife's own family
+      if (h.open) label = 'Hide';
+      else if (mode === 'family' && centreParents.includes(h.personId)) {
+        label = p.gender === 'M' ? "Dad's side" : p.gender === 'F' ? "Mum's side" : `${firstName(p)}'s side`;
+      } else if (mode === 'family' && !graph.spousesOf(centre).includes(h.personId)) {
+        label = `${firstName(p)}'s side`;
       }
-      return { ...h, label, x: at.x + NODE_W / 2 - HANDLE_W / 2, y: at.y - HANDLE_H - 6 };
+      return { ...h, label, colour: h.open ? colourOfFamily(h.personId) : null, name: personLabel(p), x: at.x, y: at.y - TAG_H / 2 };
     });
-  // "Hide" buttons only on the newest level opened on each line, plus one per
-  // side (Dad's / Mum's) to fold a whole side in one tap — not under every couple.
-  const closers = (view$?.closers || [])
-    .filter((c) => centreParents.includes(c.personId) || !graph.parentsOf(c.personId).some((pid) => openIds.has(pid)))
-    .map((c) => {
-      const parents = graph.parentsOf(c.personId).filter((pid) => layout.pos[pid]);
-      if (!parents.length) return null;
-      const x = parents.reduce((sum, pid) => sum + layout.pos[pid].x + NODE_W / 2, 0) / parents.length;
-      return { personId: c.personId, x: x - CLOSER_W / 2, y: layout.pos[parents[0]].y + NODE_H + 8 };
-    })
-    .filter(Boolean);
+  const taggedIds = new Set(handles.map((h) => h.personId));
 
   // "How are we related?" — one person selected: from you to them;
   // two selected: between the two (worded from you if you're one of them).
@@ -479,6 +539,12 @@ export default function TreeScreen({ route, navigation }) {
       label: showPhotos ? 'Show names' : 'Show pictures',
       onPress: togglePhotos,
     },
+    {
+      key: 'turn',
+      icon: landscape ? 'phone-portrait-outline' : 'phone-landscape-outline',
+      label: landscape ? 'Turn the tree upright' : 'Turn the tree sideways',
+      onPress: turnScreen,
+    },
   ];
 
   // Tapping "My family" or "Everyone" always starts that view fresh: every
@@ -493,7 +559,17 @@ export default function TreeScreen({ route, navigation }) {
   }
 
   return (
-    <Screen scroll={false} keyboardAvoiding={false} contentContainerStyle={styles.screen}>
+    <Screen
+      scroll={false}
+      keyboardAvoiding={false}
+      contentContainerStyle={[
+        styles.screen,
+        // sideways: the details card moves to the side, and the phone's own
+        // buttons / camera cut-out can be on the left or right edge
+        { paddingLeft: insets.left, paddingRight: insets.right },
+        landscape && { flexDirection: 'row', paddingBottom: insets.bottom },
+      ]}
+    >
       <View ref={viewportRef} style={styles.viewport} onLayout={onViewportLayout} {...pan.panHandlers}>
         <Animated.View
           style={[
@@ -502,8 +578,8 @@ export default function TreeScreen({ route, navigation }) {
             { transform: [{ translateX: anim.x }, { translateY: anim.y }, { scale: anim.s }] },
           ]}
         >
-          {layout.lines.map((l, i) => (
-            <View key={i} style={[styles.line, { left: l.x, top: l.y, width: l.w, height: l.h }]} />
+          {drawnLines.map((l, i) => (
+            <View key={i} style={[styles.line, { left: l.x, top: l.y, width: l.w, height: l.h }, l.colour && { backgroundColor: l.colour }]} />
           ))}
 
           {/* gold highlight along the tree's lines, between the two people being compared */}
@@ -519,12 +595,14 @@ export default function TreeScreen({ route, navigation }) {
             const placeholder = isPlaceholder(p);
             const photo = photos[node.id];
             const years = yearsText(p);
+            const ownColour = familyColour([node.id]);
             return (
               <Pressable
                 key={node.id}
                 style={[
                   styles.node,
                   { left: node.x, top: node.y },
+                  ownColour && { borderWidth: 2, borderColor: ownColour },
                   p.is_deceased && styles.nodeDeceased,
                   placeholder && styles.nodePlaceholder,
                   isCentre && styles.nodeCentre,
@@ -556,7 +634,8 @@ export default function TreeScreen({ route, navigation }) {
                   </>
                 )}
                 {isSelf ? (
-                  <View style={styles.youBadge}>
+                  // moves to the bottom edge when a tag is using the top edge
+                  <View style={[styles.youBadge, taggedIds.has(node.id) ? styles.youBadgeLow : styles.youBadgeHigh]}>
                     <Text allowFontScaling={false} style={styles.youBadgeText}>You</Text>
                   </View>
                 ) : null}
@@ -584,35 +663,27 @@ export default function TreeScreen({ route, navigation }) {
               ))
             : null}
 
-          {/* "my family" view: open a side upwards, or hide it again */}
+          {/* tags that open a side of the family, or hide it again — the same in both views */}
           {handles.map((h) => (
-            <Pressable
-              key={`open-${h.personId}`}
-              style={({ pressed }) => [styles.handle, { left: h.x, top: h.y }, pressed && styles.pressed]}
-              onPress={() => toggleSide(h.personId)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`Show ${h.label}`}
-            >
-              <Ionicons name="caret-up" size={12} color={colors.textOnPrimary} />
-              <Text allowFontScaling={false} numberOfLines={1} style={styles.handleText}>
-                {h.label}
-              </Text>
-              <Text allowFontScaling={false} style={styles.handleCount}>{h.count}</Text>
-            </Pressable>
-          ))}
-          {closers.map((c) => (
-            <Pressable
-              key={`close-${c.personId}`}
-              style={({ pressed }) => [styles.closer, { left: c.x, top: c.y }, pressed && styles.pressed]}
-              onPress={() => toggleSide(c.personId)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Hide this side of the family"
-            >
-              <Ionicons name="caret-down" size={12} color={colors.primary} />
-              <Text allowFontScaling={false} style={styles.closerText}>Hide</Text>
-            </Pressable>
+            <View key={`tag-${h.personId}`} pointerEvents="box-none" style={[styles.tagRow, { left: h.x, top: h.y }]}>
+              <Pressable
+                style={({ pressed }) => [styles.tag, h.colour && { borderWidth: 2, borderColor: h.colour }, pressed && styles.pressed]}
+                onPress={() => toggleSide(h.personId)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={h.open ? `Hide ${h.name}'s family again` : `Show ${h.name}'s family`}
+              >
+                <Ionicons name={h.open ? 'caret-down' : 'caret-up'} size={10} color={h.colour || colors.primary} />
+                <Text allowFontScaling={false} numberOfLines={1} style={[styles.tagText, h.colour && { color: h.colour }]}>
+                  {h.label}
+                </Text>
+                {h.open ? null : (
+                  <Text allowFontScaling={false} style={styles.tagCount}>
+                    +{h.count}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
           ))}
         </Animated.View>
 
@@ -670,15 +741,15 @@ export default function TreeScreen({ route, navigation }) {
 
         {picked.length === 0 ? (
           <Text style={styles.hint} pointerEvents="none">
-            {mode === 'family' && handles.length
-              ? 'Tap ▲ above a parent to open their side · tap two people to compare'
+            {handles.some((h) => !h.open)
+              ? 'Tap a ▲ tag to open that side of the family · tap two people to compare'
               : 'Tap a person for details · tap two people to compare'}
           </Text>
         ) : null}
       </View>
 
       {picked.length ? (
-        <View style={styles.infoCard}>
+        <InfoCard landscape={landscape}>
           <View style={styles.infoTop}>
             {selected ? (
               <Avatar name={personLabel(selected)} size={44} uri={photos[selected.id]} />
@@ -800,9 +871,20 @@ export default function TreeScreen({ route, navigation }) {
             ) : null}
           </View>
           ) : null}
-        </View>
+        </InfoCard>
       ) : null}
     </Screen>
+  );
+}
+
+// Details of the selected person: along the bottom when upright, down the
+// right-hand side (and scrollable) when the phone is sideways.
+function InfoCard({ landscape, children }) {
+  if (!landscape) return <View style={styles.infoCard}>{children}</View>;
+  return (
+    <ScrollView style={styles.infoCardSide} contentContainerStyle={styles.infoCardSideContent} keyboardShouldPersistTaps="handled">
+      {children}
+    </ScrollView>
   );
 }
 
@@ -836,7 +918,9 @@ const styles = StyleSheet.create({
   nodeYears: { color: colors.textMuted, fontSize: fontSize.xs, textAlign: 'center' },
   nodeYearsMemory: { fontStyle: 'italic' },
   placeholderText: { color: colors.textMuted, fontSize: fontSize.xs, fontStyle: 'italic', textAlign: 'center' },
-  youBadge: { position: 'absolute', top: -9, right: 8, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
+  youBadgeHigh: { top: -9 },
+  youBadgeLow: { bottom: -9 },
+  youBadge: { position: 'absolute', right: 8, backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
   youBadgeText: { color: colors.primaryDark, fontSize: 11, fontWeight: fontWeight.bold },
   toggle: {
     position: 'absolute',
@@ -851,35 +935,21 @@ const styles = StyleSheet.create({
   },
   toggleClosed: { backgroundColor: colors.primary },
   toggleText: { color: colors.textOnPrimary, fontSize: 11, fontWeight: fontWeight.bold },
-  handle: {
-    position: 'absolute',
-    width: HANDLE_W,
-    height: HANDLE_H,
-    borderRadius: HANDLE_H / 2,
+  tagRow: { position: 'absolute', width: NODE_W, height: TAG_H, alignItems: 'center', justifyContent: 'center' },
+  tag: {
+    maxWidth: NODE_W,
+    height: TAG_H,
+    borderRadius: TAG_H / 2,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 4,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: colors.primary,
-    ...shadow.card,
-  },
-  handleText: { flexShrink: 1, color: colors.textOnPrimary, fontSize: 12, fontWeight: fontWeight.medium },
-  handleCount: { color: colors.primaryDark, backgroundColor: colors.accent, fontSize: 10, fontWeight: fontWeight.bold, borderRadius: 8, overflow: 'hidden', paddingHorizontal: 5 },
-  closer: {
-    position: 'absolute',
-    width: CLOSER_W,
-    height: TOGGLE_SIZE,
-    borderRadius: TOGGLE_SIZE / 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
+    paddingHorizontal: 8,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.primary,
   },
-  closerText: { color: colors.primary, fontSize: 12, fontWeight: fontWeight.medium },
+  tagText: { flexShrink: 1, color: colors.primary, fontSize: 11, fontWeight: fontWeight.medium },
+  tagCount: { color: colors.primaryDark, backgroundColor: colors.accent, fontSize: 10, fontWeight: fontWeight.bold, borderRadius: 8, overflow: 'hidden', paddingHorizontal: 5 },
   toolbar: {
     position: 'absolute',
     top: spacing.sm,
@@ -921,6 +991,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm + 4,
   },
+  infoCardSide: { flexGrow: 0, width: 300, backgroundColor: colors.surface, borderLeftWidth: 1, borderLeftColor: colors.border },
+  infoCardSideContent: { padding: spacing.md, gap: spacing.sm + 4 },
   infoTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 4 },
   infoName: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold },
   infoRelation: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium, marginTop: 2 },

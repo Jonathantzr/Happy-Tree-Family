@@ -3,11 +3,12 @@
     "name": "Happy-Tree-Family",
     "slug": "Happy-Tree-Family",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "requireFullScreen": true
     },
     "android": {
       "adaptiveIcon": {
@@ -30,6 +31,12 @@
           "image": "./assets/splash.png",
           "backgroundColor": "#F7F5F0",
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
         }
       ]
     ]

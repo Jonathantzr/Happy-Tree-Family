@@ -6,12 +6,14 @@ import { supabase } from '../lib/supabase';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
 import { toISODate, formatPersonMeta, isoToDate, askYesNo } from '../lib/personHelpers';
 import { buildGraph, linkCandidates, siblingIdsOf } from '../lib/relationships';
+import { loadNameBook, lineGenerations, childIndexOf, characterAt, characterText } from '../lib/nameBook';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
 import TextField from '../components/TextField';
 import DateField from '../components/DateField';
 import GenderPicker from '../components/GenderPicker';
 import Avatar from '../components/Avatar';
+import CharacterFinder from '../components/CharacterFinder';
 
 function personLabel(p) {
   return p?.name_en || p?.name_pinyin || p?.name_cn || '(no name)';
@@ -35,7 +37,9 @@ export default function PersonFormScreen({ route, navigation }) {
   const [people, setPeople] = useState([]);
   const [relationships, setRelationships] = useState([]);
   const [showExisting, setShowExisting] = useState(false);
+  const [nameBook, setNameBook] = useState({ book: null, entries: [] });
   const [name, setName] = useState('');
+  const [nameCn, setNameCn] = useState('');
   const [gender, setGender] = useState(null);
   const [isDeceased, setIsDeceased] = useState(false);
   const [birthDate, setBirthDate] = useState(null);
@@ -64,6 +68,7 @@ export default function PersonFormScreen({ route, navigation }) {
     }
     setPeople(data);
     setRelationships(rels);
+    setNameBook(await loadNameBook(familyId));
     setLoading(false);
   }, [familyId]);
 
@@ -80,6 +85,7 @@ export default function PersonFormScreen({ route, navigation }) {
   if (isEdit && target && filledFor !== target.id) {
     setFilledFor(target.id);
     setName(personLabel(target) === '(no name)' ? '' : personLabel(target));
+    setNameCn(target.name_en || target.name_pinyin ? target.name_cn || '' : '');
     setGender(target.gender || null);
     setIsDeceased(!!target.is_deceased);
     setBirthDate(isoToDate(target.birth_date));
@@ -90,6 +96,18 @@ export default function PersonFormScreen({ route, navigation }) {
     () => (isRelative && target ? linkCandidates(graph, target.id, mode) : []),
     [isRelative, target, graph, mode]
   );
+
+  // Name book hint: the generation character for the person being added or
+  // edited, when the family's poem reaches them. A suggestion only.
+  const nameHint = useMemo(() => {
+    if (!target || !nameBook.entries.length) return null;
+    const line = lineGenerations(graph, nameBook.book);
+    let index = null;
+    if (mode === 'child') index = childIndexOf(graph, line, target.id);
+    else if (mode === 'edit' || mode === 'sibling') index = line.has(target.id) ? line.get(target.id) : null;
+    const found = characterAt(nameBook.entries, index);
+    return found.status === 'ok' ? found.entry : null;
+  }, [target, nameBook, graph, mode]);
 
   const labelById = (id) => personLabel(graph.byId.get(id));
   const parentIdsOf = (id) => graph.parentsOf(id);
@@ -131,6 +149,26 @@ export default function PersonFormScreen({ route, navigation }) {
   }
 
   const row = (child, parent, type = 'parent') => ({ person_id: child, related_person_id: parent, relation_type: type });
+
+  // Two parents of the same child are linked as husband and wife as well, so
+  // they stand side by side in the tree with ONE line down to the child.
+  // Left alone when either of them already has a husband/wife: that's a
+  // remarriage, and the app can't know who was married to whom.
+  function withCoupleRows(rows) {
+    const extra = [];
+    const isMarried = (id) =>
+      spouseIdsOf(id).length > 0 ||
+      [...rows, ...extra].some((r) => r.relation_type === 'spouse' && (r.person_id === id || r.related_person_id === id));
+    const newParentRows = rows.filter((r) => r.relation_type === 'parent');
+    for (const kid of new Set(newParentRows.map((r) => r.person_id))) {
+      const parents = [
+        ...new Set([...parentIdsOf(kid), ...newParentRows.filter((r) => r.person_id === kid).map((r) => r.related_person_id)]),
+      ];
+      if (parents.length !== 2 || isMarried(parents[0]) || isMarried(parents[1])) continue;
+      extra.push(row(parents[0], parents[1], 'spouse'));
+    }
+    return [...rows, ...extra];
+  }
 
   async function makePlaceholderParent() {
     const { data, error } = await supabase
@@ -192,7 +230,7 @@ export default function PersonFormScreen({ route, navigation }) {
         rows = [row(other.id, placeholderId)];
       }
     }
-    const ok = await saveLinks(rows);
+    const ok = await saveLinks(withCoupleRows(rows));
     setSaving(false);
     if (ok) navigation.goBack();
   }
@@ -223,6 +261,10 @@ export default function PersonFormScreen({ route, navigation }) {
       death_date: isDeceased ? toISODate(deathDate) : null,
       date_precision: birthDate ? 'exact' : 'unknown',
     };
+    // only sent when there is something to save, so people can still be added
+    // before the Stage 6 database update has been run
+    const cn = nameCn.trim() || null;
+    if (cn !== ((isEdit ? target.name_cn : null) || null)) fields.name_cn = cn;
 
     if (isEdit) {
       const { data, error } = await supabase
@@ -264,6 +306,7 @@ export default function PersonFormScreen({ route, navigation }) {
       }
       rows = parentIds.map((pid) => row(newPerson.id, pid));
     }
+    rows = withCoupleRows(rows);
     if (rows.length) {
       const { error: linkError } = await supabase.from('person_relationships').insert(rows);
       if (linkError) Alert.alert('Person saved, but linking failed', linkError.message);
@@ -363,6 +406,24 @@ export default function PersonFormScreen({ route, navigation }) {
             autoCapitalize="words"
             returnKeyType="done"
           />
+          <TextField
+            label="Chinese name (optional)"
+            placeholder="e.g. 李文明"
+            value={nameCn}
+            onChangeText={setNameCn}
+            autoCorrect={false}
+            returnKeyType="done"
+            style={{ marginBottom: spacing.sm }}
+          />
+          <CharacterFinder suggestFrom={name} onPick={(char) => setNameCn((old) => old + char)} style={nameHint ? { marginBottom: spacing.sm } : null} />
+          {nameHint ? (
+            <View style={styles.nameHint}>
+              <Ionicons name="book-outline" size={18} color={colors.primary} />
+              <Text style={styles.nameHintText}>
+                Name book: this generation's name is {characterText(nameHint)}. Only a suggestion.
+              </Text>
+            </View>
+          ) : null}
           <GenderPicker value={gender} onChange={setGender} />
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>This person has passed away</Text>
@@ -428,6 +489,8 @@ const styles = StyleSheet.create({
   pickMeta: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
   linkWord: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
   formCard: { ...card, padding: spacing.md },
+  nameHint: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primarySoft, borderRadius: radius.md, padding: spacing.sm + 4, marginBottom: spacing.md },
+  nameHintText: { flex: 1, color: colors.text, fontSize: fontSize.sm, lineHeight: 20 },
   formTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginBottom: spacing.md },
   sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.lg, marginBottom: spacing.sm },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md, minHeight: touchTarget, marginBottom: spacing.md },
