@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
-import { buildGraph, describeRelation, relationText } from '../lib/relationships';
+import { buildGraph, describeRelation, relationText, explainRelation } from '../lib/relationships';
 import { layoutTree, familyView, NODE_W, NODE_H, TOGGLE_SIZE } from '../lib/treeLayout';
 import { formatPersonMeta } from '../lib/personHelpers';
 import Screen from '../components/Screen';
@@ -19,6 +19,7 @@ const PHOTO_SIZE = 72;
 const HANDLE_W = 124; // "▲ Dad's side" button above a person
 const HANDLE_H = 28;
 const CLOSER_W = 72; // "Hide" button under parents that were opened
+const PATH_W = 6; // thickness of the gold "how we're related" line
 const PHOTOS_SETTING_KEY = 'tree.showPhotos'; // remembers names vs pictures on this phone
 const NO_FOLDS = new Set();
 
@@ -62,14 +63,18 @@ export default function TreeScreen({ route, navigation }) {
   const [relationships, setRelationships] = useState([]);
   const [graveIds, setGraveIds] = useState([]); // person ids that have a grave record
   const [selfPersonId, setSelfPersonId] = useState(null);
-  const [selectedId, setSelectedId] = useState(focusPersonId || null);
+  // up to two people can be selected (tap again to unselect); with two, the
+  // card at the bottom offers to show how they're related
+  const [selectedIds, setSelectedIds] = useState(focusPersonId ? [focusPersonId] : []);
+  const [linkShown, setLinkShown] = useState(false); // "how are we related" opened on the card
   const [viewportReady, setViewportReady] = useState(false);
   const [photos, setPhotos] = useState({}); // person id -> their first biography photo
-  const [showPhotos, setShowPhotos] = useState(false);
-  const [mode, setMode] = useState('family'); // 'family' | 'everyone'
+  const [showPhotos, setShowPhotos] = useState(false);  const [mode, setMode] = useState('family'); // 'family' | 'everyone'
   const [centreId, setCentreId] = useState(focusPersonId || null); // null = you
   const [openIds, setOpenIds] = useState(() => new Set()); // people whose parents' side is open
   const [collapsed, setCollapsed] = useState(() => new Set()); // folded branches in "everyone"
+  const [showSteps, setShowSteps] = useState(false);
+  const [freshView, setFreshView] = useState(0); // bumped to re-show the starting view
 
   useEffect(() => {
     AsyncStorage.getItem(PHOTOS_SETTING_KEY)
@@ -124,8 +129,7 @@ export default function TreeScreen({ route, navigation }) {
     setPeople(peopleData || []);
     setRelationships(relData);
     setGraveIds(graveData.map((g) => g.person_id));
-    setPhotos(photoMap);
-    setSelfPersonId(me ? me.id : null);
+    setPhotos(photoMap);    setSelfPersonId(me ? me.id : null);
     setLoading(false);
   }, [familyId]);
 
@@ -229,13 +233,6 @@ export default function TreeScreen({ route, navigation }) {
     else centreOn(mode === 'family' ? centre : selfPersonId || centre, animated, 0.85);
   }
 
-  function zoomBy(factor) {
-    const s = clampZoom(view.s * factor);
-    const cx = (viewport.w / 2 - view.tx) / view.s;
-    const cy = (viewport.h / 2 - view.ty) / view.s;
-    moveTo({ s, tx: viewport.w / 2 - cx * s, ty: viewport.h / 2 - cy * s });
-  }
-
   // One finger drags, two fingers pinch. Plain taps are left alone so they
   // still reach the person boxes.
   const pan = useRef(
@@ -298,16 +295,17 @@ export default function TreeScreen({ route, navigation }) {
     anchor.current = at ? { id: personId, x: at.x, y: at.y } : null;
   }
 
-  // First view, and a fresh view whenever the mode or the centre person changes
+  // First view, and a fresh view whenever the mode or the centre person
+  // changes. It switches straight to the new view (no sliding across the
+  // screen), so it feels like the tree simply changes.
   const shownFor = useRef(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loading || !viewportReady || !centre) return;
-    const key = `${mode}|${centre}`;
+    const key = `${mode}|${centre}|${freshView}`;
     if (shownFor.current === key) return;
-    const firstTime = shownFor.current === null;
     shownFor.current = key;
-    showStart(!firstTime);
-  }, [loading, viewportReady, mode, centre]);
+    showStart(false);
+  }, [loading, viewportReady, mode, centre, freshView, layout]);
 
   function toggleSide(personId) {
     holdStill(personId);
@@ -368,7 +366,9 @@ export default function TreeScreen({ route, navigation }) {
   }
 
   // someone folded away or outside the current view can't stay selected
-  const selected = selectedId && layout.pos[selectedId] ? graph.byId.get(selectedId) : null;
+  const picked = selectedIds.filter((id) => layout.pos[id]).map((id) => graph.byId.get(id));
+  const selected = picked.length === 1 ? picked[0] : null;
+  const pair = picked.length === 2 ? picked : null;
   const selectedRelation = selected ? describeRelation(graph, selfPersonId, selected.id) : null;
 
   // "▲ Dad's side" buttons and "Hide" buttons, in drawing coordinates
@@ -387,7 +387,10 @@ export default function TreeScreen({ route, navigation }) {
       }
       return { ...h, label, x: at.x + NODE_W / 2 - HANDLE_W / 2, y: at.y - HANDLE_H - 6 };
     });
+  // "Hide" buttons only on the newest level opened on each line, plus one per
+  // side (Dad's / Mum's) to fold a whole side in one tap — not under every couple.
   const closers = (view$?.closers || [])
+    .filter((c) => centreParents.includes(c.personId) || !graph.parentsOf(c.personId).some((pid) => openIds.has(pid)))
     .map((c) => {
       const parents = graph.parentsOf(c.personId).filter((pid) => layout.pos[pid]);
       if (!parents.length) return null;
@@ -396,35 +399,97 @@ export default function TreeScreen({ route, navigation }) {
     })
     .filter(Boolean);
 
+  // "How are we related?" — one person selected: from you to them;
+  // two selected: between the two (worded from you if you're one of them).
+  let fromId = null;
+  let toId = null;
+  if (selected && selfPersonId && selected.id !== selfPersonId) {
+    fromId = selfPersonId;
+    toId = selected.id;
+  } else if (pair) {
+    [fromId, toId] = pair[1].id === selfPersonId ? [pair[1].id, pair[0].id] : [pair[0].id, pair[1].id];
+  }
+  const connection = linkShown && fromId ? explainRelation(graph, fromId, toId, fromId === selfPersonId) : null;
+  const pathIds = new Set(connection?.people || []);
+
+  // The gold highlight follows the tree's own lines: up from a child to the
+  // bar under its parents, along it, and up to the one parent that matters
+  // (not across to the other parent). Brothers/sisters are joined along the
+  // bar under their parents, without climbing up to the parents at all.
+  const pathRects = [];
+  if (connection) {
+    const P = PATH_W;
+    const v = (x, y1, y2) => pathRects.push({ left: x - P / 2, top: Math.min(y1, y2), width: P, height: Math.abs(y2 - y1) });
+    const h = (x1, x2, y) => pathRects.push({ left: Math.min(x1, x2) - P / 2, top: y - P / 2, width: Math.abs(x2 - x1) + P, height: P });
+    const mid = (id) => layout.pos[id].x + NODE_W / 2;
+    const linkTo = (child, parent) => (layout.childLinks[child] || []).find((l) => l.parents.includes(parent));
+    const childToParent = (child, parent) => {
+      const link = linkTo(child, parent);
+      if (!link || !layout.pos[child] || !layout.pos[parent]) return;
+      v(mid(child), layout.pos[child].y, link.busY);
+      h(mid(child), link.fromX, link.busY);
+      v(link.fromX, link.busY, link.fromY);
+      if (link.parents.length > 1) {
+        // from the middle of the couple's line to this parent's box only
+        const at = layout.pos[parent];
+        h(link.fromX, mid(parent) < link.fromX ? at.x + NODE_W : at.x, link.fromY);
+      }
+    };
+    for (const hop of connection.hops) {
+      if (hop.type === 'parent') childToParent(hop.from, hop.to);
+      else if (hop.type === 'child') childToParent(hop.to, hop.from);
+      else if (hop.type === 'spouse') {
+        if (layout.pos[hop.from] && layout.pos[hop.to]) h(mid(hop.from), mid(hop.to), layout.pos[hop.from].y + NODE_H / 2);
+      } else if (hop.type === 'sibling') {
+        const a = hop.parents.map((p) => linkTo(hop.from, p)).find(Boolean);
+        const b = hop.parents.map((p) => linkTo(hop.to, p)).find(Boolean);
+        if (a && b && a.busY === b.busY && layout.pos[hop.from] && layout.pos[hop.to]) {
+          v(mid(hop.from), layout.pos[hop.from].y, a.busY);
+          h(mid(hop.from), mid(hop.to), a.busY);
+          v(mid(hop.to), a.busY, layout.pos[hop.to].y);
+        } else if (hop.parents[0]) {
+          // drawn under different bars (e.g. half-brothers): go via the shared parent
+          childToParent(hop.from, hop.parents[0]);
+          childToParent(hop.to, hop.parents[0]);
+        }
+      }
+    }
+  }
+
+  // Tap to select, tap again to unselect. A third person replaces the one
+  // selected first, so the two most recent stay selected.
+  function tapPerson(id) {
+    setShowSteps(false);
+    setLinkShown(false);
+    setSelectedIds((old) => (old.includes(id) ? old.filter((x) => x !== id) : [...old, id].slice(-2)));
+  }
+
+  function clearSelection() {
+    setSelectedIds([]);
+    setLinkShown(false);
+    setShowSteps(false);
+  }
+
   const controls = [
-    { key: 'in', icon: 'add', label: 'Zoom in', onPress: () => zoomBy(1.4) },
-    { key: 'out', icon: 'remove', label: 'Zoom out', onPress: () => zoomBy(1 / 1.4) },
     { key: 'fit', icon: 'scan-outline', label: 'Fit everything on screen', onPress: () => fitAll() },
-    // each icon shows what tapping will switch TO
+    // shows what tapping will switch TO: a picture icon while names are showing, and back
     {
       key: 'photos',
       icon: showPhotos ? 'text-outline' : 'image-outline',
       label: showPhotos ? 'Show names' : 'Show pictures',
       onPress: togglePhotos,
     },
-    {
-      key: 'mode',
-      icon: mode === 'family' ? 'people-outline' : 'person-outline',
-      label: mode === 'family' ? 'Show the whole family' : 'Show just my family',
-      onPress: () => setMode(mode === 'family' ? 'everyone' : 'family'),
-    },
   ];
-  if (selfPersonId) {
-    controls.push({
-      key: 'me',
-      icon: 'locate-outline',
-      label: 'Find me',
-      onPress: () => {
-        setSelectedId(selfPersonId);
-        if (mode === 'family' && centre !== selfPersonId) showFamilyOf(selfPersonId);
-        else centreOn(selfPersonId);
-      },
-    });
+
+  // Tapping "My family" or "Everyone" always starts that view fresh: every
+  // opened side or folded branch goes back to how it was, and "My family"
+  // goes back to you.
+  function chooseMode(next) {
+    setOpenIds(new Set());
+    setCollapsed(new Set());
+    if (next === 'family') setCentreId(null);
+    setMode(next);
+    setFreshView((n) => n + 1);
   }
 
   return (
@@ -441,9 +506,14 @@ export default function TreeScreen({ route, navigation }) {
             <View key={i} style={[styles.line, { left: l.x, top: l.y, width: l.w, height: l.h }]} />
           ))}
 
+          {/* gold highlight along the tree's lines, between the two people being compared */}
+          {pathRects.map((r, i) => (
+            <View key={`path-${i}`} style={[styles.pathLine, r]} />
+          ))}
+
           {layout.nodes.map((node) => {
             const p = graph.byId.get(node.id);
-            const isSelected = node.id === selectedId;
+            const isSelected = selectedIds.includes(node.id);
             const isSelf = node.id === selfPersonId;
             const isCentre = mode === 'family' && node.id === centre && !isSelf;
             const placeholder = isPlaceholder(p);
@@ -459,9 +529,10 @@ export default function TreeScreen({ route, navigation }) {
                   placeholder && styles.nodePlaceholder,
                   isCentre && styles.nodeCentre,
                   isSelf && styles.nodeSelf,
+                  pathIds.has(node.id) && styles.nodeOnPath,
                   isSelected && styles.nodeSelected,
                 ]}
-                onPress={() => setSelectedId(node.id)}
+                onPress={() => tapPerson(node.id)}
                 accessibilityRole="button"
                 accessibilityLabel={personLabel(p)}
               >
@@ -549,57 +620,154 @@ export default function TreeScreen({ route, navigation }) {
           {controls.map((c, i) => (
             <Pressable
               key={c.key}
-              style={({ pressed }) => [styles.toolButton, i > 0 && styles.toolDivider, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.toolButton, i > 0 && styles.toolDivider, c.active && styles.toolButtonOn, pressed && styles.pressed]}
               onPress={c.onPress}
               accessibilityRole="button"
               accessibilityLabel={c.label}
+              accessibilityState={{ selected: !!c.active }}
             >
-              <Ionicons name={c.icon} size={22} color={colors.primary} />
+              <Ionicons name={c.icon} size={22} color={c.active ? colors.textOnPrimary : colors.primary} />
             </Pressable>
           ))}
         </View>
 
-        <View style={styles.modeTag} pointerEvents="none">
-          <Text style={styles.modeTagText}>
-            {mode === 'everyone'
-              ? 'Whole family'
-              : centre === selfPersonId
-              ? 'Your family'
-              : `${firstName(graph.byId.get(centre))}'s family`}
-          </Text>
+        {/* which view: just your family (opens side by side), or everyone at once */}
+        <View style={styles.topLeft} pointerEvents="box-none">
+          <View style={styles.segment}>
+            {[
+              { key: 'family', label: selfPersonId ? 'My family' : 'Family' },
+              { key: 'everyone', label: 'Everyone' },
+            ].map((s) => {
+              const on = mode === s.key;
+              return (
+                <Pressable
+                  key={s.key}
+                  onPress={() => chooseMode(s.key)}
+                  style={[styles.segmentButton, on && styles.segmentButtonOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text allowFontScaling={false} style={on ? styles.segmentTextOn : styles.segmentText}>
+                    {s.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {mode === 'family' && selfPersonId && centre !== selfPersonId ? (
+            <Pressable
+              onPress={() => showFamilyOf(selfPersonId)}
+              style={({ pressed }) => [styles.backChip, pressed && styles.pressed]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="arrow-undo-outline" size={14} color={colors.primary} />
+              <Text allowFontScaling={false} numberOfLines={1} style={styles.backChipText}>
+                {firstName(graph.byId.get(centre))}'s family · back to mine
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
-        {!selected ? (
+        {picked.length === 0 ? (
           <Text style={styles.hint} pointerEvents="none">
             {mode === 'family' && handles.length
-              ? 'Tap ▲ above a parent to open their side'
-              : 'Drag to move · pinch to zoom · tap a person'}
+              ? 'Tap ▲ above a parent to open their side · tap two people to compare'
+              : 'Tap a person for details · tap two people to compare'}
           </Text>
         ) : null}
       </View>
 
-      {selected ? (
+      {picked.length ? (
         <View style={styles.infoCard}>
           <View style={styles.infoTop}>
-            <Avatar name={personLabel(selected)} size={44} uri={photos[selected.id]} />
+            {selected ? (
+              <Avatar name={personLabel(selected)} size={44} uri={photos[selected.id]} />
+            ) : (
+              <View style={styles.pairAvatars}>
+                <Avatar name={personLabel(pair[0])} size={36} uri={photos[pair[0].id]} />
+                <View style={styles.pairSecond}>
+                  <Avatar name={personLabel(pair[1])} size={36} uri={photos[pair[1].id]} />
+                </View>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
-              <Text style={styles.infoName}>{personLabel(selected)}</Text>
-              {selected.id === selfPersonId ? (
-                <Text style={styles.infoRelation}>This is you</Text>
-              ) : selectedRelation ? (
-                <Text style={styles.infoRelation}>{relationText(selectedRelation)}</Text>
-              ) : null}
-              {formatPersonMeta(selected) ? <Text style={styles.infoMeta}>{formatPersonMeta(selected)}</Text> : null}
+              {selected ? (
+                <>
+                  <Text style={styles.infoName}>{personLabel(selected)}</Text>
+                  {selected.id === selfPersonId ? (
+                    <Text style={styles.infoRelation}>This is you</Text>
+                  ) : selectedRelation ? (
+                    <Text style={styles.infoRelation}>{relationText(selectedRelation)}</Text>
+                  ) : null}
+                  {formatPersonMeta(selected) ? <Text style={styles.infoMeta}>{formatPersonMeta(selected)}</Text> : null}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.infoName} numberOfLines={2}>
+                    {personLabel(pair[0])} & {personLabel(pair[1])}
+                  </Text>
+                  {connection ? <Text style={styles.infoRelation}>{connection.summary}</Text> : null}
+                </>
+              )}
             </View>
             <Pressable
               style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
-              onPress={() => setSelectedId(null)}
+              onPress={clearSelection}
               accessibilityRole="button"
-              accessibilityLabel="Close"
+              accessibilityLabel="Unselect"
             >
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
           </View>
+
+          {/* how the two are related — opened from here, shown in gold on the tree */}
+          {fromId ? (
+            !linkShown ? (
+              pair ? (
+                <AppButton title="How are they related?" icon="git-compare-outline" onPress={() => setLinkShown(true)} />
+              ) : (
+                <Pressable
+                  onPress={() => setLinkShown(true)}
+                  style={({ pressed }) => [styles.howLink, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="git-compare-outline" size={18} color={colors.primary} />
+                  <Text style={styles.howToggleText}>How are we related?</Text>
+                </Pressable>
+              )
+            ) : !connection ? (
+              <Text style={styles.infoMeta}>No family link between them has been recorded yet.</Text>
+            ) : (
+              <View style={styles.howBox}>
+                {connection.keyLink ? (
+                  <Text style={styles.howKey}>{connection.keyLink}</Text>
+                ) : connection.steps.length === 1 ? (
+                  <Text style={styles.howKey}>{connection.steps[0]}.</Text>
+                ) : null}
+                {/* a single step needs no extra list */}
+                {connection.steps.length > 1 ? (
+                  <Pressable
+                    onPress={() => setShowSteps(!showSteps)}
+                    style={({ pressed }) => [styles.howToggle, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showSteps }}
+                  >
+                    <Text style={styles.howToggleText}>{showSteps ? 'Hide the steps' : `Show every step (${connection.steps.length})`}</Text>
+                    <Ionicons name={showSteps ? 'chevron-up' : 'chevron-down'} size={16} color={colors.primary} />
+                  </Pressable>
+                ) : null}
+                {showSteps && connection.steps.length > 1
+                  ? connection.steps.map((s, i) => (
+                      <Text key={s} style={styles.howStep}>
+                        {i + 1}. {s}
+                      </Text>
+                    ))
+                  : null}
+              </View>
+            )
+          ) : null}
+
+          {selected ? (
           <View style={styles.infoButtons}>
             <AppButton
               title="Profile"
@@ -631,6 +799,7 @@ export default function TreeScreen({ route, navigation }) {
               />
             ) : null}
           </View>
+          ) : null}
         </View>
       ) : null}
     </Screen>
@@ -725,8 +894,25 @@ const styles = StyleSheet.create({
   },
   toolButton: { width: touchTarget - 2, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
   toolDivider: { borderTopWidth: 1, borderTopColor: colors.surfaceAlt },
-  modeTag: { position: 'absolute', top: spacing.sm, left: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.xs },
-  modeTagText: { color: colors.primary, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+  toolButtonOn: { backgroundColor: colors.primary },
+  topLeft: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: touchTarget + spacing.md, alignItems: 'flex-start', gap: spacing.xs },
+  segment: { flexDirection: 'row', backgroundColor: colors.surface, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, padding: 3, ...shadow.card },
+  segmentButton: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  segmentButtonOn: { backgroundColor: colors.primary },
+  segmentText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  segmentTextOn: { color: colors.textOnPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  backChip: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%', minHeight: 36, paddingHorizontal: spacing.sm + 4, borderRadius: radius.pill, backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.primary },
+  backChipText: { flexShrink: 1, color: colors.primary, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+  pathLine: { position: 'absolute', borderRadius: PATH_W / 2, backgroundColor: colors.accent },
+  nodeOnPath: { borderWidth: 2, borderColor: colors.accent },
+  howBox: { backgroundColor: colors.background, borderRadius: radius.md, padding: spacing.sm + 4, gap: 4 },
+  howKey: { color: colors.text, fontSize: fontSize.sm, lineHeight: 20 },
+  howToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36 },
+  howLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 40, alignSelf: 'flex-start' },
+  pairAvatars: { flexDirection: 'row' },
+  pairSecond: { marginLeft: -12, borderRadius: 20, borderWidth: 2, borderColor: colors.surface },
+  howToggleText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  howStep: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20 },
   hint: { position: 'absolute', left: 0, right: 0, bottom: spacing.sm, textAlign: 'center', color: colors.textMuted, fontSize: fontSize.xs },
   infoCard: {
     backgroundColor: colors.surface,

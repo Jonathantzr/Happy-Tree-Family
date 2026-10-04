@@ -99,7 +99,7 @@ export default function ClaimScreen({ route, navigation }) {
     const meta = formatPersonMeta(person);
     const yes = await askYesNo(
       'Is this you?',
-      `${personLabel(person)}${meta ? `\n${meta}` : ''}\n\nYour account will be linked to this person in ${familyName}. The family tree will then show how everyone is related to you.`
+      `${personLabel(person)}${meta ? `\n${meta}` : ''}\n\nWe'll link this entry to your account.`
     );
     if (!yes) return;
     setBusy(true);
@@ -119,7 +119,7 @@ export default function ClaimScreen({ route, navigation }) {
       Alert.alert('Your details are missing', 'Fill in your details in Settings → Your details first.');
       return;
     }
-    const yes = await askYesNo('Add yourself?', `${profile.display_name} will be added to ${familyName} as a new person and linked to your account.`);
+    const yes = await askYesNo('Add yourself?', `We'll add ${profile.display_name} to ${familyName} and link it to your account.`);
     if (!yes) return;
     setBusy(true);
     const { error } = await addMeToFamily(familyId, profile);
@@ -157,37 +157,45 @@ export default function ClaimScreen({ route, navigation }) {
         <Text style={styles.name}>{personLabel(person)}</Text>
         {formatPersonMeta(person) ? <Text style={styles.meta}>{formatPersonMeta(person)}</Text> : null}
       </View>
-      {score > 0 ? <Text style={styles.matchPill}>Possible match</Text> : null}
+      {score > 0 ? <Text style={styles.matchPill}>Close match</Text> : null}
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
   );
 
+  // The "add me" choice sits at the top, so nobody has to scroll past a long
+  // list to find it if they haven't been added yet.
   return (
     <Screen>
-      <Text style={styles.heading}>Which one is you?</Text>
+      <Text style={styles.heading}>Are you already in {familyName}?</Text>
       <Text style={styles.intro}>
-        Someone in {familyName} may have already added you — maybe under a nickname or a short name. Tap yourself to
-        link your account. If you're not on the list, add yourself below.
+        {candidates.length > 0
+          ? 'A relative may have added you already, perhaps under a nickname or a short name. If you see yourself below, tap your name to link it to your account.'
+          : "Nobody here is waiting to be linked to an account yet, so let's add you to the family."}
       </Text>
+
+      <View style={[styles.card, styles.addCard]}>
+        <Text style={styles.addTitle}>{candidates.length > 0 ? 'Not on the list?' : 'Add yourself'}</Text>
+        <Text style={styles.addText}>
+          We'll add {profile?.display_name || 'you'} to the family using the details from your account.
+        </Text>
+        <AppButton title="Add me to the family" icon="person-add-outline" onPress={addMe} loading={busy} />
+      </View>
 
       {likely.length > 0 ? (
         <>
-          <Text style={styles.sectionHeading}>Possible matches</Text>
+          <Text style={styles.sectionHeading}>Could this be you?</Text>
           <View style={styles.card}>{likely.map(renderRow)}</View>
         </>
       ) : null}
 
       {others.length > 0 ? (
         <>
-          <Text style={styles.sectionHeading}>{likely.length > 0 ? 'Everyone else' : 'People in this family'}</Text>
+          <Text style={styles.sectionHeading}>{likely.length > 0 ? 'Everyone else in the family' : 'People in this family'}</Text>
           <View style={styles.card}>{others.map(renderRow)}</View>
         </>
       ) : null}
 
-      {candidates.length === 0 ? <Text style={styles.intro}>No one in this family is waiting to be claimed.</Text> : null}
-
-      <AppButton title="I'm not on the list — add me" icon="person-add-outline" onPress={addMe} loading={busy} style={styles.addButton} />
-      <AppButton title="Skip for now" variant="ghost" onPress={goToFamily} disabled={busy} style={{ marginTop: spacing.xs }} />
+      <AppButton title="I'll do this later" variant="ghost" onPress={goToFamily} disabled={busy} style={{ marginTop: spacing.xs }} />
     </Screen>
   );
 }
@@ -204,5 +212,7 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
   meta: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
   matchPill: { color: colors.primaryDark, backgroundColor: colors.accent, fontSize: fontSize.xs, fontWeight: fontWeight.medium, borderRadius: radius.pill, overflow: 'hidden', paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  addButton: { marginTop: spacing.sm },
+  addCard: { padding: spacing.md },
+  addTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold },
+  addText: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20, marginTop: 2, marginBottom: spacing.md },
 });

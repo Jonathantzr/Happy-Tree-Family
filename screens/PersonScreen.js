@@ -169,7 +169,6 @@ export default function PersonScreen({ route, navigation }) {
   const relationToViewer = isMe
     ? 'This is you'
     : relationText(describeRelation(buildGraph(people, relationships), selfPersonId, person.id));
-
   // "This is me": only offered when you aren't linked to anyone in this family
   // yet and nobody else is linked to this person.
   const canClaim = !selfPersonId && !person.linked_user_id && !person.is_deceased;
@@ -225,12 +224,12 @@ export default function PersonScreen({ route, navigation }) {
 
   function goAddRelative(kind) {
     setMenuOpen(false);
-    navigation.navigate('FamilyDetail', { familyId, familyName, openRelative: { kind, personId: person.id } });
+    navigation.navigate('PersonForm', { familyId, familyName, mode: kind, personId: person.id });
   }
 
   function goEdit() {
     setMenuOpen(false);
-    navigation.navigate('FamilyDetail', { familyId, familyName, openEdit: person.id });
+    navigation.navigate('PersonForm', { familyId, familyName, mode: 'edit', personId: person.id });
   }
 
   const goTo = (screen) => navigation.navigate(screen, { personId: person.id, personName: personLabel(person) });

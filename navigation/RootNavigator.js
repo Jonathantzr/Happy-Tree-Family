@@ -13,6 +13,7 @@ import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 import TreeScreen from '../screens/TreeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ClaimScreen from '../screens/ClaimScreen';
+import PersonFormScreen from '../screens/PersonFormScreen';
 import RequestsScreen from '../screens/RequestsScreen';
 import RequestChangeScreen from '../screens/RequestChangeScreen';
 import { getMyProfile } from '../lib/profile';
@@ -78,7 +79,12 @@ function FamiliesStackScreen() {
         })}
       />
       <FamiliesStack.Screen name="Tree" component={TreeScreen} options={{ title: 'Family tree' }} />
-      <FamiliesStack.Screen name="Claim" component={ClaimScreen} options={{ title: 'Find yourself' }} />
+      <FamiliesStack.Screen name="Claim" component={ClaimScreen} options={{ title: 'Join the family tree' }} />
+      <FamiliesStack.Screen
+        name="PersonForm"
+        component={PersonFormScreen}
+        options={({ route }) => ({ title: route.params?.mode === 'edit' ? 'Edit details' : 'Add a person' })}
+      />
       <FamiliesStack.Screen name="Requests" component={RequestsScreen} options={{ title: 'Change requests' }} />
       <FamiliesStack.Screen name="RequestChange" component={RequestChangeScreen} options={{ title: 'Request a change' }} />
       <FamiliesStack.Screen

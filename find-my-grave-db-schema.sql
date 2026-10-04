@@ -152,3 +152,26 @@ CREATE INDEX idx_relationships_person ON person_relationships(person_id);
 CREATE INDEX idx_relationships_related ON person_relationships(related_person_id);
 CREATE INDEX idx_route_steps_grave ON route_steps(grave_id, step_order);
 CREATE INDEX idx_graves_person ON graves(person_id);
+
+-- ============================================================
+-- 6. LATER ADDITIONS (already applied through the files in supabase/ —
+--    listed here so this document matches the live database)
+-- ============================================================
+
+-- Stage 5b (supabase/stage5b-who-am-i-and-requests.sql)
+--   users: + birth_date DATE, gender TEXT ('M','F','other'), profile_complete BOOLEAN.
+--   users has row level security: read/update your own row, read people who share a family.
+--   Functions: claim_person(person), release_person(person), review_change_request(request, approve).
+
+CREATE TABLE change_requests (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id     UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  person_id     UUID NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+  requested_by  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  changes       JSONB NOT NULL DEFAULT '{}',   -- e.g. {"name_en": "Jonathan", "birth_date": "1995-03-02"}
+  note          TEXT,
+  status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  reviewed_by   UUID REFERENCES users(id),
+  reviewed_at   TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
