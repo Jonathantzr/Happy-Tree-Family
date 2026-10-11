@@ -5,8 +5,8 @@
 // - a consistent background color
 // Use this once per screen instead of copy-pasting this logic everywhere.
 
-import React, { useContext } from 'react';
-import { View, ScrollView, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import React, { useContext, useEffect, useRef } from 'react';
+import { View, ScrollView, KeyboardAvoidingView, Platform, StyleSheet, Keyboard, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderHeightContext } from '@react-navigation/elements';
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
@@ -27,6 +27,29 @@ export default function Screen({
   const insets = useSafeAreaInsets();
   const headerHeight = useContext(HeaderHeightContext) || 0;
 
+  // When the keyboard opens, scroll so the box being typed in AND the button
+  // that usually sits under it (e.g. "Join family") are both above the keyboard.
+  const ownScrollRef = useRef(null);
+  const scrollView = scrollRef || ownScrollRef;
+  const scrollY = useRef(0);
+  useEffect(() => {
+    if (!scroll) return undefined;
+    const ROOM_BELOW = 88; // space for one button under the box
+    const sub = Keyboard.addListener('keyboardDidShow', (e) => {
+      // a moment for the screen to finish shrinking around the keyboard
+      setTimeout(() => {
+        const input = TextInput.State.currentlyFocusedInput ? TextInput.State.currentlyFocusedInput() : null;
+        if (!input || !input.measureInWindow) return;
+        input.measureInWindow((x, y, w, h) => {
+          const keyboardTop = e.endCoordinates.screenY;
+          const overlap = y + h + ROOM_BELOW - keyboardTop;
+          if (overlap > 0) scrollView.current?.scrollTo({ y: scrollY.current + overlap, animated: true });
+        });
+      }, 120);
+    });
+    return () => sub.remove();
+  }, [scroll, scrollView]);
+
   // Screens inside the bottom tabs sit above the tab bar, which already clears
   // the Android nav buttons / iPhone home indicator — don't add that space twice.
   const inTabs = useContext(BottomTabBarHeightContext) !== undefined;
@@ -34,7 +57,11 @@ export default function Screen({
 
   const inner = scroll ? (
     <ScrollView
-      ref={scrollRef}
+      ref={scrollView}
+      onScroll={(e) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={32}
       style={{ flex: 1 }}
       contentContainerStyle={[
         { paddingTop: spacing.md, paddingBottom: 40 + bottomInset, paddingHorizontal: spacing.md },

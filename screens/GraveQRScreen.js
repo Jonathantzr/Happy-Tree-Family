@@ -17,7 +17,7 @@ const TIPS = [
   'Test-scan it after printing/laminating, and again at the grave in daylight.',
   'Stick it on a clean, flat spot with outdoor-grade adhesive (weatherproof double-sided tape or silicone), away from the carved name.',
   'Ask the older relatives and the cemetery first; some have rules about what can be attached to a grave.',
-  'Sun and rain wear things out. Check it every Ching Ming. You can share a fresh copy from this screen any time.',
+  'Sun and rain wear things out. Check it every time you visit. You can share a fresh copy from this screen any time.',
 ];
 
 export default function GraveQRScreen({ route }) {

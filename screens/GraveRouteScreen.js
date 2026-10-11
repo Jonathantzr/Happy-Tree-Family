@@ -196,7 +196,7 @@ export default function GraveRouteScreen({ route }) {
           </Text>
           <TextField
             label="Cemetery name"
-            placeholder="e.g. Ipoh Chinese Cemetery"
+            placeholder="e.g. Ipoh Memorial Park"
             value={graveForm.cemetery_name}
             autoCapitalize="words"
             onChangeText={(t) => setGraveForm({ ...graveForm, cemetery_name: t })}
@@ -219,7 +219,7 @@ export default function GraveRouteScreen({ route }) {
             label="General notes (optional)"
             multiline
             value={graveForm.general_notes}
-            placeholder="e.g. very busy during Ching Ming, arrive early"
+            placeholder="e.g. very busy on festival days, arrive early"
             onChangeText={(t) => setGraveForm({ ...graveForm, general_notes: t })}
           />
           <AppButton title="Save cemetery" onPress={saveGrave} loading={saving} />
@@ -268,7 +268,7 @@ export default function GraveRouteScreen({ route }) {
           <Text style={styles.sectionHeading}>From the entrance to the grave</Text>
           {steps.length === 0 && !stepForm && (
             <Text style={styles.help}>
-              No steps yet. Add them in order, like: "Enter the east gate" → "Park by the red temple" →
+              No steps yet. Add them in order, like: "Enter the east gate" → "Park by the main office" →
               "Walk 100m past the big tree". Photos are optional!
             </Text>
           )}
@@ -314,7 +314,7 @@ export default function GraveRouteScreen({ route }) {
                 label="Details (optional)"
                 multiline
                 value={stepForm.description}
-                placeholder="e.g. Park near the red temple building"
+                placeholder="e.g. Park near the main office"
                 onChangeText={(t) => setStepForm({ ...stepForm, description: t })}
               />
               <TextField

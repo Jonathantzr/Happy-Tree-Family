@@ -10,6 +10,7 @@ import TextField from '../components/TextField';
 import DateField from '../components/DateField';
 import GenderPicker from '../components/GenderPicker';
 import CharacterFinder from '../components/CharacterFinder';
+import { getTraditions, followsChinese } from '../lib/traditions';
 
 // For members who want their own entry in the family changed: fill in what
 // it should say, and a family admin approves or rejects it.
@@ -20,11 +21,13 @@ export default function RequestChangeScreen({ route, navigation }) {
   const [person, setPerson] = useState(null);
   const [name, setName] = useState('');
   const [nameCn, setNameCn] = useState('');
+  const [chinese, setChinese] = useState(false); // family follows Chinese traditions: show the Chinese name box
   const [birthDate, setBirthDate] = useState(null);
   const [gender, setGender] = useState(null);
   const [note, setNote] = useState('');
 
   useEffect(() => {
+    getTraditions(familyId).then((list) => setChinese(followsChinese(list)));
     supabase
       .from('persons')
       .select('*')
@@ -40,7 +43,7 @@ export default function RequestChangeScreen({ route, navigation }) {
         }
         setLoading(false);
       });
-  }, [personId]);
+  }, [personId, familyId]);
 
   async function handleSend() {
     const changes = {};
@@ -92,16 +95,20 @@ export default function RequestChangeScreen({ route, navigation }) {
         Change what you'd like your entry to say. A family admin will approve or reject the change.
       </Text>
       <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" returnKeyType="next" />
-      <TextField
-        label="Chinese name (optional)"
-        placeholder="e.g. 李文明"
-        value={nameCn}
-        onChangeText={setNameCn}
-        autoCorrect={false}
-        returnKeyType="done"
-        style={{ marginBottom: spacing.sm }}
-      />
-      <CharacterFinder suggestFrom={name} onPick={(char) => setNameCn((old) => old + char)} />
+      {chinese ? (
+        <>
+          <TextField
+            label="Chinese name (optional)"
+            placeholder="e.g. 李文明"
+            value={nameCn}
+            onChangeText={setNameCn}
+            autoCorrect={false}
+            returnKeyType="done"
+            style={{ marginBottom: spacing.sm }}
+          />
+          <CharacterFinder suggestFrom={name} onPick={(char) => setNameCn((old) => old + char)} />
+        </>
+      ) : null}
       <DateField label="Birth date" placeholder="Tap to pick a date" value={birthDate} onChange={setBirthDate} />
       <GenderPicker value={gender} onChange={setGender} />
       <TextField

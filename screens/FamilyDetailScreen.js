@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { colors, spacing, radius, fontSize, fontWeight, shadow } from '../lib/theme';
+import { colors, spacing, radius, fontSize, fontWeight, shadow, touchTarget } from '../lib/theme';
+import { getTraditions, followsChinese } from '../lib/traditions';
 import { formatPersonMeta } from '../lib/personHelpers';
 import { buildGraph, describeRelation, relationText, siblingIdsOf } from '../lib/relationships';
 import Screen from '../components/Screen';
@@ -23,6 +24,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [people, setPeople] = useState([]);
   const [meLinked, setMeLinked] = useState(true); // is your account linked to someone in this family?
   const [isAdmin, setIsAdmin] = useState(false);
+  const [chinese, setChinese] = useState(false); // does this family follow Chinese traditions? (shows the Name book)
   const [pendingCount, setPendingCount] = useState(0); // change requests waiting (admins: all, members: yours)
   const [relationships, setRelationships] = useState([]);
   const [selfPersonId, setSelfPersonId] = useState(null);
@@ -73,9 +75,36 @@ export default function FamilyDetailScreen({ route, navigation }) {
       supabase.from('change_requests').select('id').eq('family_id', familyId).eq('status', 'pending'),
     ]);
     setIsAdmin(fm?.role === 'admin');
+    setChinese(followsChinese(await getTraditions(familyId)));
     setPendingCount(pendingError ? 0 : (pending || []).length);
     setLoading(false);
   }
+
+  // Title-bar buttons: Tree for every family, Names only for families that
+  // follow Chinese traditions (see lib/traditions.js).
+  useLayoutEffect(() => {
+    const go = (screen) => navigation.navigate(screen, { familyId, familyName });
+    const button = (label, icon, screen, hint) => (
+      <Pressable
+        onPress={() => go(screen)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={hint}
+        style={styles.headerButton}
+      >
+        <Ionicons name={icon} size={18} color={colors.primary} />
+        <Text style={styles.headerButtonText}>{label}</Text>
+      </Pressable>
+    );
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerButtons}>
+          {chinese ? button('Names', 'book-outline', 'NameBook', 'Open the generation name book') : null}
+          {button('Tree', 'git-network-outline', 'Tree', 'Open the family tree')}
+        </View>
+      ),
+    });
+  }, [navigation, familyId, familyName, chinese]);
 
   if (loading) {
     return (
@@ -133,7 +162,10 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
   const query = search.trim().toLowerCase();
   const searching = query.length > 0;
-  const found = searching ? people.filter((p) => personLabel(p).toLowerCase().includes(query)).sort(byName) : [];
+  // searches the Chinese name too, so 陈 finds everyone with it
+  const found = searching
+    ? people.filter((p) => personLabel(p).toLowerCase().includes(query) || (chinese && (p.name_cn || '').includes(search.trim()))).sort(byName)
+    : [];
 
   const renderRow = (item, index) => (
     <Pressable
@@ -144,7 +176,10 @@ export default function FamilyDetailScreen({ route, navigation }) {
     >
       <Avatar name={personLabel(item)} size={44} />
       <View style={{ flex: 1 }}>
-        <Text style={styles.personName}>{personLabel(item)}</Text>
+        <Text style={styles.personName}>
+          {personLabel(item)}
+          {chinese && item.name_cn && item.name_cn !== personLabel(item) ? <Text style={styles.personNameCn}>  {item.name_cn}</Text> : null}
+        </Text>
         {relationOf[item.id] ? <Text style={styles.personRelation}>{relationOf[item.id]}</Text> : null}
         {formatPersonMeta(item) || item.is_deceased ? (
           <Text style={styles.personMeta}>
@@ -264,6 +299,17 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
       {people.length > 0 && !searching ? <Text style={styles.listHint}>Tap + to add someone new</Text> : null}
 
+      {!searching ? (
+        <Pressable
+          style={({ pressed }) => [styles.settingsLink, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('FamilySettings', { familyId, familyName })}
+          accessibilityRole="button"
+        >
+          <Ionicons name="options-outline" size={18} color={colors.primary} />
+          <Text style={styles.settingsLinkText}>Family settings</Text>
+        </Pressable>
+      ) : null}
+
       {/* leaves room so the round + button never covers the last row */}
       <View style={{ height: 72 }} />
     </Screen>
@@ -273,6 +319,11 @@ export default function FamilyDetailScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   pressed: { opacity: 0.6 },
+  headerButtons: { flexDirection: 'row', alignItems: 'center' },
+  headerButton: { minHeight: touchTarget - 8, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerButtonText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  settingsLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: touchTarget, marginTop: spacing.md },
+  settingsLinkText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
   fab: {
     position: 'absolute',
     right: 20,
@@ -295,6 +346,7 @@ const styles = StyleSheet.create({
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md - 4, paddingHorizontal: spacing.md, minHeight: 72 },
   rowDivider: { borderTopWidth: 1, borderTopColor: colors.surfaceAlt },
   personName: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
+  personNameCn: { color: colors.textMuted, fontWeight: fontWeight.regular },
   personRelation: { color: colors.primary, fontSize: fontSize.sm, marginTop: 1 },
   section: { marginBottom: spacing.md },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },

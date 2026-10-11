@@ -9,6 +9,8 @@ import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
 import TextField from '../components/TextField';
 import EmptyState from '../components/EmptyState';
+import TraditionPicker from '../components/TraditionPicker';
+import { followsChinese, traditionFields } from '../lib/traditions';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I — easy to read aloud
 
@@ -26,6 +28,9 @@ export default function HomeScreen({ navigation }) {
   const [families, setFamilies] = useState([]);
   const [familyName, setFamilyName] = useState('');
   const [surnameCn, setSurnameCn] = useState('');
+  const [traditions, setTraditions] = useState([]); // a new family starts neutral: nothing picked
+  const [traditionOther, setTraditionOther] = useState(''); // "Something else?" — a request to the developers
+  const [openForm, setOpenForm] = useState(null); // null | 'create' | 'join' — both stay folded until tapped
   const [creating, setCreating] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joining, setJoining] = useState(false);
@@ -60,7 +65,7 @@ export default function HomeScreen({ navigation }) {
 
   async function handleCreateFamily() {
     if (!familyName.trim()) {
-      Alert.alert('Family name required', 'e.g. "Tan Family (Segamat)"');
+      Alert.alert('Family name required', 'e.g. "Lee Family - Ipoh"');
       return;
     }
     Keyboard.dismiss();
@@ -75,14 +80,18 @@ export default function HomeScreen({ navigation }) {
 
     let family = null;
     let lastError = null;
+    // only sent when something was picked, so families can still be created
+    // before the Stage 6.5a database update has been run
+    const chosen = traditions.length || traditionOther.trim() ? traditionFields(traditions, traditionOther) : {};
     for (let attempt = 0; attempt < 5 && !family; attempt++) {
       const { data, error } = await supabase
         .from('families')
         .insert({
           name: familyName.trim(),
-          surname_cn: surnameCn.trim() || null,
+          surname_cn: followsChinese(traditions) ? surnameCn.trim() || null : null,
           created_by: user.id,
           join_code: generateJoinCode(),
+          ...chosen,
         })
         .select()
         .single();
@@ -124,6 +133,9 @@ export default function HomeScreen({ navigation }) {
 
     setFamilyName('');
     setSurnameCn('');
+    setTraditions([]);
+    setTraditionOther('');
+    setOpenForm(null);
     setCreating(false);
     fetchFamilies();
     navigation.navigate('FamilyDetail', { familyId: family.id, familyName: family.name });
@@ -165,6 +177,7 @@ export default function HomeScreen({ navigation }) {
 
     setJoinCodeInput('');
     setJoining(false);
+    setOpenForm(null);
     fetchFamilies();
     // next: find yourself among the people already in this family
     navigation.navigate('Claim', { familyId: family.id, familyName: family.name });
@@ -195,7 +208,7 @@ export default function HomeScreen({ navigation }) {
           <EmptyState
             icon="people-outline"
             title="No families yet"
-            message="Start a new family below, or join one with a code from a relative."
+            message="Start a new family, or join one with a code from a relative — the buttons are below."
           />
         </View>
       ) : (
@@ -243,6 +256,17 @@ export default function HomeScreen({ navigation }) {
         ))
       )}
 
+      {/* Both forms stay folded behind a button until needed, so the page
+          shows your families first instead of a wall of boxes. */}
+      {openForm === null ? (
+        <View style={styles.formButtons}>
+          <AppButton title="Start a new family" icon="add" variant="secondary" onPress={() => setOpenForm('create')} />
+          <AppButton title="Join with a code" icon="enter-outline" variant="secondary" onPress={() => setOpenForm('join')} />
+        </View>
+      ) : null}
+
+      {openForm === 'create' ? (
+      <>
       <Text style={styles.sectionHeading}>Start a new family</Text>
       <View style={[styles.card, styles.formCard]}>
         <TextField
@@ -253,16 +277,24 @@ export default function HomeScreen({ navigation }) {
           autoCapitalize="words"
           returnKeyType="next"
         />
-        <TextField
-          label="Chinese surname (optional)"
-          placeholder="e.g. 李"
-          value={surnameCn}
-          onChangeText={setSurnameCn}
-          returnKeyType="done"
-        />
+        <TraditionPicker value={traditions} onChange={setTraditions} other={traditionOther} onOtherChange={setTraditionOther} />
+        {followsChinese(traditions) ? (
+          <TextField
+            label="Chinese surname (optional)"
+            placeholder="e.g. 李"
+            value={surnameCn}
+            onChangeText={setSurnameCn}
+            returnKeyType="done"
+          />
+        ) : null}
         <AppButton title="Create family" icon="add" onPress={handleCreateFamily} loading={creating} />
+        <AppButton title="Cancel" variant="ghost" onPress={() => setOpenForm(null)} disabled={creating} style={{ marginTop: spacing.xs }} />
       </View>
+      </>
+      ) : null}
 
+      {openForm === 'join' ? (
+      <>
       <Text style={styles.sectionHeading}>Join a family</Text>
       <View style={[styles.card, styles.formCard]}>
         <TextField
@@ -276,8 +308,11 @@ export default function HomeScreen({ navigation }) {
           returnKeyType="done"
           onSubmitEditing={handleJoinFamily}
         />
-        <AppButton title="Join family" variant="secondary" icon="enter-outline" onPress={handleJoinFamily} loading={joining} />
+        <AppButton title="Join family" icon="enter-outline" onPress={handleJoinFamily} loading={joining} />
+        <AppButton title="Cancel" variant="ghost" onPress={() => setOpenForm(null)} disabled={joining} style={{ marginTop: spacing.xs }} />
       </View>
+      </>
+      ) : null}
     </Screen>
   );
 }
@@ -310,5 +345,6 @@ const styles = StyleSheet.create({
   codeValue: { flex: 1, color: colors.text, fontSize: fontSize.sm, fontWeight: fontWeight.medium, letterSpacing: 1.5 },
   copyButton: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: touchTarget, paddingHorizontal: spacing.md },
   copyText: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  formButtons: { gap: spacing.sm, marginTop: spacing.sm },
   sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.sm, marginBottom: spacing.sm },
 });

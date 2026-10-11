@@ -7,6 +7,7 @@ import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } fr
 import { toISODate, formatPersonMeta, isoToDate, askYesNo } from '../lib/personHelpers';
 import { buildGraph, linkCandidates, siblingIdsOf } from '../lib/relationships';
 import { loadNameBook, lineGenerations, childIndexOf, characterAt, characterText } from '../lib/nameBook';
+import { getTraditions, followsChinese } from '../lib/traditions';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
 import TextField from '../components/TextField';
@@ -38,6 +39,7 @@ export default function PersonFormScreen({ route, navigation }) {
   const [relationships, setRelationships] = useState([]);
   const [showExisting, setShowExisting] = useState(false);
   const [nameBook, setNameBook] = useState({ book: null, entries: [] });
+  const [chinese, setChinese] = useState(false); // family follows Chinese traditions: Chinese name box + name book hint
   const [name, setName] = useState('');
   const [nameCn, setNameCn] = useState('');
   const [gender, setGender] = useState(null);
@@ -68,7 +70,9 @@ export default function PersonFormScreen({ route, navigation }) {
     }
     setPeople(data);
     setRelationships(rels);
-    setNameBook(await loadNameBook(familyId));
+    const isChineseFamily = followsChinese(await getTraditions(familyId));
+    setChinese(isChineseFamily);
+    setNameBook(isChineseFamily ? await loadNameBook(familyId) : { book: null, entries: [] });
     setLoading(false);
   }, [familyId]);
 
@@ -406,16 +410,20 @@ export default function PersonFormScreen({ route, navigation }) {
             autoCapitalize="words"
             returnKeyType="done"
           />
-          <TextField
-            label="Chinese name (optional)"
-            placeholder="e.g. 李文明"
-            value={nameCn}
-            onChangeText={setNameCn}
-            autoCorrect={false}
-            returnKeyType="done"
-            style={{ marginBottom: spacing.sm }}
-          />
-          <CharacterFinder suggestFrom={name} onPick={(char) => setNameCn((old) => old + char)} style={nameHint ? { marginBottom: spacing.sm } : null} />
+          {chinese ? (
+            <>
+              <TextField
+                label="Chinese name (optional)"
+                placeholder="e.g. 李文明"
+                value={nameCn}
+                onChangeText={setNameCn}
+                autoCorrect={false}
+                returnKeyType="done"
+                style={{ marginBottom: spacing.sm }}
+              />
+              <CharacterFinder suggestFrom={name} onPick={(char) => setNameCn((old) => old + char)} style={nameHint ? { marginBottom: spacing.sm } : null} />
+            </>
+          ) : null}
           {nameHint ? (
             <View style={styles.nameHint}>
               <Ionicons name="book-outline" size={18} color={colors.primary} />

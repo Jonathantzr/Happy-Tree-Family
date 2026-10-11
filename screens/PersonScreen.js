@@ -10,6 +10,7 @@ import Avatar from '../components/Avatar';
 import { formatPersonMeta, askYesNo } from '../lib/personHelpers';
 import { claimPerson, releasePerson } from '../lib/profile';
 import { buildGraph, describeRelation, relationText } from '../lib/relationships';
+import { getTraditions, followsChinese } from '../lib/traditions';
 import { loadNameBook, lineGenerations, childIndexOf, characterAt, characterText, usesCharacter, isChinese } from '../lib/nameBook';
 
 function personLabel(p) {
@@ -28,6 +29,7 @@ export default function PersonScreen({ route, navigation }) {
   const [selfPersonId, setSelfPersonId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [nameBook, setNameBook] = useState({ book: null, entries: [] });
+  const [chinese, setChinese] = useState(false); // family follows Chinese traditions: show Chinese names
   const insets = useSafeAreaInsets();
 
   const loadEverything = useCallback(async () => {
@@ -64,7 +66,10 @@ export default function PersonScreen({ route, navigation }) {
       .maybeSingle();
     setGrave(graveData || null);
     setStepCount(graveData?.route_steps?.[0]?.count || 0);
-    setNameBook(await loadNameBook(familyId));
+    // the name book only exists for families that follow Chinese traditions
+    const isChineseFamily = followsChinese(await getTraditions(familyId));
+    setChinese(isChineseFamily);
+    setNameBook(isChineseFamily ? await loadNameBook(familyId) : { book: null, entries: [] });
 
     const {
       data: { user },
@@ -281,6 +286,7 @@ export default function PersonScreen({ route, navigation }) {
         </Pressable>
         <Avatar name={personLabel(person)} size={76} />
         <Text style={styles.name}>{personLabel(person)}</Text>
+        {chinese && person.name_cn && person.name_cn !== personLabel(person) ? <Text style={styles.nameCnBanner}>{person.name_cn}</Text> : null}
         {formatPersonMeta(person) ? <Text style={styles.datePill}>{formatPersonMeta(person)}</Text> : null}
         {person.is_deceased ? <Text style={styles.memoryTag}>In memory</Text> : null}
         {relationToViewer ? (
@@ -450,6 +456,7 @@ const styles = StyleSheet.create({
   banner: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center' },
   menuButton: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
   name: { color: colors.textOnPrimary, fontSize: fontSize.xl, fontWeight: fontWeight.bold, textAlign: 'center', marginTop: spacing.sm },
+  nameCnBanner: { color: colors.textOnPrimary, fontSize: fontSize.lg, textAlign: 'center', marginTop: 2 },
   datePill: { color: colors.textOnPrimary, fontSize: fontSize.sm, marginTop: spacing.xs },
   memoryTag: { color: colors.textOnPrimary, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
   relationPill: { backgroundColor: colors.accent, borderRadius: radius.pill, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.sm },

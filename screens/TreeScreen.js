@@ -10,6 +10,7 @@ import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } fr
 import { buildGraph, describeRelation, relationText, explainRelation } from '../lib/relationships';
 import { layoutTree, familyView, everyoneView, NODE_W, NODE_H, TOGGLE_SIZE } from '../lib/treeLayout';
 import { formatPersonMeta } from '../lib/personHelpers';
+import { getTraditions, followsChinese } from '../lib/traditions';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
 import Avatar from '../components/Avatar';
@@ -71,7 +72,9 @@ export default function TreeScreen({ route, navigation }) {
   const [linkShown, setLinkShown] = useState(false); // "how are we related" opened on the card
   const [viewportReady, setViewportReady] = useState(false);
   const [photos, setPhotos] = useState({}); // person id -> their first biography photo
-  const [showPhotos, setShowPhotos] = useState(false);  const [mode, setMode] = useState('family'); // 'family' | 'everyone'
+  const [showPhotos, setShowPhotos] = useState(false);
+  const [chinese, setChinese] = useState(false); // family follows Chinese traditions: show Chinese names on the card
+  const [mode, setMode] = useState('family'); // 'family' | 'everyone'
   const [centreId, setCentreId] = useState(focusPersonId || null); // null = you
   const [openIds, setOpenIds] = useState(() => new Set()); // people whose parents' side is open
   const [collapsed, setCollapsed] = useState(() => new Set()); // folded branches in "everyone"
@@ -164,7 +167,9 @@ export default function TreeScreen({ route, navigation }) {
     setPeople(peopleData || []);
     setRelationships(relData);
     setGraveIds(graveData.map((g) => g.person_id));
-    setPhotos(photoMap);    setSelfPersonId(me ? me.id : null);
+    setPhotos(photoMap);
+    setChinese(followsChinese(await getTraditions(familyId)));
+       setSelfPersonId(me ? me.id : null);
     setLoading(false);
   }, [familyId]);
 
@@ -764,7 +769,10 @@ export default function TreeScreen({ route, navigation }) {
             <View style={{ flex: 1 }}>
               {selected ? (
                 <>
-                  <Text style={styles.infoName}>{personLabel(selected)}</Text>
+                  <Text style={styles.infoName}>
+                    {personLabel(selected)}
+                    {chinese && selected.name_cn && selected.name_cn !== personLabel(selected) ? <Text style={styles.infoNameCn}>  {selected.name_cn}</Text> : null}
+                  </Text>
                   {selected.id === selfPersonId ? (
                     <Text style={styles.infoRelation}>This is you</Text>
                   ) : selectedRelation ? (
@@ -995,6 +1003,7 @@ const styles = StyleSheet.create({
   infoCardSideContent: { padding: spacing.md, gap: spacing.sm + 4 },
   infoTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 4 },
   infoName: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold },
+  infoNameCn: { color: colors.textMuted, fontWeight: fontWeight.regular },
   infoRelation: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium, marginTop: 2 },
   infoMeta: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
   closeButton: { width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
