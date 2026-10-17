@@ -11,6 +11,8 @@ import Screen from '../components/Screen';
 import TextField from '../components/TextField';
 import Avatar from '../components/Avatar';
 import EmptyState from '../components/EmptyState';
+import CountBadge from '../components/CountBadge';
+import { getUnseenCounts } from '../lib/changeLog';
 
 function personLabel(p) {
   return p.name_en || p.name_pinyin || p.name_cn || '(no name)';
@@ -26,6 +28,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [chinese, setChinese] = useState(false); // does this family follow Chinese traditions? (shows the Name book)
   const [pendingCount, setPendingCount] = useState(0); // change requests waiting (admins: all, members: yours)
+  const [newChanges, setNewChanges] = useState(0); // admins: changes by others since you last looked (red number)
   const [relationships, setRelationships] = useState([]);
   const [selfPersonId, setSelfPersonId] = useState(null);
   const [search, setSearch] = useState('');
@@ -75,6 +78,7 @@ export default function FamilyDetailScreen({ route, navigation }) {
       supabase.from('change_requests').select('id').eq('family_id', familyId).eq('status', 'pending'),
     ]);
     setIsAdmin(fm?.role === 'admin');
+    setNewChanges(fm?.role === 'admin' ? (await getUnseenCounts())[familyId] || 0 : 0);
     setChinese(followsChinese(await getTraditions(familyId)));
     setPendingCount(pendingError ? 0 : (pending || []).length);
     setLoading(false);
@@ -238,6 +242,23 @@ export default function FamilyDetailScreen({ route, navigation }) {
         </Pressable>
       ) : null}
 
+      {isAdmin && newChanges > 0 ? (
+        <Pressable
+          style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('RecentChanges', { familyId, familyName })}
+          accessibilityRole="button"
+        >
+          <Ionicons name="time-outline" size={26} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>
+              {newChanges} new change{newChanges === 1 ? '' : 's'} by family members
+            </Text>
+            <Text style={styles.bannerText}>Tap to see them, and undo any that are wrong.</Text>
+          </View>
+          <CountBadge count={newChanges} label="new changes" />
+        </Pressable>
+      ) : null}
+
       {people.length === 0 ? (
         <EmptyState icon="person-add-outline" title="No one added yet" message="Tap the + button to add the first person." />
       ) : null}
@@ -299,9 +320,22 @@ export default function FamilyDetailScreen({ route, navigation }) {
 
       {people.length > 0 && !searching ? <Text style={styles.listHint}>Tap + to add someone new</Text> : null}
 
-      {!searching ? (
+      {!searching && isAdmin ? (
+        // admins only: every change with an Undo button (screens/RecentChangesScreen.js)
         <Pressable
           style={({ pressed }) => [styles.settingsLink, pressed && styles.pressed]}
+          onPress={() => navigation.navigate('RecentChanges', { familyId, familyName })}
+          accessibilityRole="button"
+        >
+          <Ionicons name="time-outline" size={18} color={colors.primary} />
+          <Text style={styles.settingsLinkText}>Recent changes</Text>
+          <CountBadge count={newChanges} label="new changes" />
+        </Pressable>
+      ) : null}
+
+      {!searching ? (
+        <Pressable
+          style={({ pressed }) => [styles.settingsLink, isAdmin && { marginTop: 0 }, pressed && styles.pressed]}
           onPress={() => navigation.navigate('FamilySettings', { familyId, familyName })}
           accessibilityRole="button"
         >

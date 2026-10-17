@@ -12,7 +12,6 @@ import {
   matchScore,
   profileDifferences,
   describeChanges,
-  sendChangeRequest,
 } from '../lib/profile';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
@@ -31,7 +30,6 @@ export default function ClaimScreen({ route, navigation }) {
   const [busy, setBusy] = useState(false);
   const [profile, setProfile] = useState(null);
   const [candidates, setCandidates] = useState([]);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const load = useCallback(async () => {
     const me = await getMyProfile();
@@ -48,16 +46,6 @@ export default function ClaimScreen({ route, navigation }) {
       .map((p) => ({ person: p, score: matchScore(me, p) }))
       .sort((a, b) => b.score - a.score);
     setCandidates(scored);
-
-    if (me) {
-      const { data: fm } = await supabase
-        .from('family_members')
-        .select('role')
-        .eq('family_id', familyId)
-        .eq('user_id', me.id)
-        .maybeSingle();
-      setIsAdmin(fm?.role === 'admin');
-    }
     setLoading(false);
   }, [familyId]);
 
@@ -72,27 +60,24 @@ export default function ClaimScreen({ route, navigation }) {
     navigation.popTo('FamilyDetail', { familyId, familyName });
   }
 
-  // After linking: if your own details differ from the family's record,
-  // admins can update it straight away; members send a request instead.
+  // After linking: if your own details differ from the family's record, you
+  // can update it straight away — your own entry is yours to change
+  // (lib/permissions.js).
   async function offerUpdate(person) {
     const changes = profileDifferences(profile, person);
     if (Object.keys(changes).length === 0) return;
     const lines = describeChanges(changes, person).join('\n');
-    if (isAdmin) {
-      const yes = await askYesNo('Update the family record?', `Your details are different from this family's record:\n\n${lines}\n\nUpdate the record to match?`);
-      if (!yes) return;
-      const { error } = await supabase.from('persons').update({ ...changes, updated_at: new Date().toISOString() }).eq('id', person.id);
-      if (error) Alert.alert('Could not update', error.message);
-      return;
-    }
     const yes = await askYesNo(
-      'Ask to update the record?',
-      `Your details are different from this family's record:\n\n${lines}\n\nSend a request to the family admin to update it? (Keep it if the family just uses a nickname for you.)`
+      'Update the family record?',
+      `Your details are different from this family's record:\n\n${lines}\n\nUpdate the record to match? (Keep it if the family just uses a nickname for you.)`
     );
     if (!yes) return;
-    const { error } = await sendChangeRequest(familyId, person.id, changes, 'Sent when linking my account');
-    if (error) Alert.alert('Could not send the request', error.message);
-    else Alert.alert('Request sent', 'A family admin will review it.');
+    const { data, error } = await supabase
+      .from('persons')
+      .update({ ...changes, updated_at: new Date().toISOString() })
+      .eq('id', person.id)
+      .select('id');
+    if (error || !data || data.length === 0) Alert.alert('Could not update', error ? error.message : 'Nothing was updated. You can change it later from your page: ⋯ → Edit details.');
   }
 
   async function pick(person) {

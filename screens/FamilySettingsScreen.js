@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import { colors, spacing, fontSize } from '../lib/theme';
+import { colors, spacing, radius, fontSize, fontWeight, shadow } from '../lib/theme';
 import { getTraditionDetails, saveTraditions } from '../lib/traditions';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
@@ -12,7 +13,7 @@ import TraditionPicker from '../components/TraditionPicker';
 // Settings tab). For now: which traditions the family follows, which decides
 // what the app shows for it. Everyone can look; only family admins can change.
 export default function FamilySettingsScreen({ route, navigation }) {
-  const { familyId } = route.params;
+  const { familyId, familyName } = route.params;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -66,6 +67,19 @@ export default function FamilySettingsScreen({ route, navigation }) {
 
   return (
     <Screen keyboardAvoiding>
+      <Pressable
+        style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}
+        onPress={() => navigation.navigate('Members', { familyId, familyName })}
+        accessibilityRole="button"
+      >
+        <Ionicons name="people-outline" size={24} color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.linkTitle}>Members and admins</Text>
+          <Text style={styles.linkText}>Who has joined, and who can change what.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+      </Pressable>
+
       <TraditionPicker value={traditions} onChange={setTraditions} other={other} onOtherChange={setOther} disabled={!isAdmin} startOpen />
       <Text style={styles.note}>
         Switching one off only hides those parts of the app for this family. Nothing is deleted — switch it back on and everything returns.
@@ -81,5 +95,21 @@ export default function FamilySettingsScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  pressed: { opacity: 0.6 },
+  linkCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 4,
+    minHeight: 64,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
+  linkTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
+  linkText: { color: colors.textMuted, fontSize: fontSize.sm, marginTop: 2 },
   note: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20, marginBottom: spacing.md },
 });

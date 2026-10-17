@@ -3,6 +3,7 @@ import { View, Text, Pressable, ActivityIndicator, Alert, StyleSheet, Image, Mod
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { getPersonRights } from '../lib/permissions';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
@@ -11,8 +12,11 @@ import AppButton from '../components/AppButton';
 import TextField from '../components/TextField';
 import EmptyState from '../components/EmptyState';
 
-export default function BiographyScreen({ route }) {
+export default function BiographyScreen({ route, navigation }) {
   const { personId, personName } = route.params;
+  // may you change this story? (your immediate family, or a story you started
+  // or nobody has started — see lib/permissions.js)
+  const [rights, setRights] = useState({ canEditStory: false });
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,6 +41,7 @@ export default function BiographyScreen({ route }) {
       .maybeSingle();
     if (error) Alert.alert('Could not load biography', error.message);
     setBio(data || null);
+    setRights(await getPersonRights(personId));
     setLoading(false);
   }
 
@@ -117,18 +122,16 @@ export default function BiographyScreen({ route }) {
   }
 
   function confirmDeletePhoto(url) {
-    Alert.alert('Delete this photo?', 'This cannot be undone.', [
+    Alert.alert('Delete this photo?', 'It will be taken off their story.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => deletePhoto(url) },
     ]);
   }
 
+  // Only takes the photo off the list. The file itself is kept, so a family
+  // admin can bring it back with Undo on the Recent changes screen.
   async function deletePhoto(url) {
     try {
-      const path = url.split('/bio-photos/')[1];
-      if (path) {
-        await supabase.storage.from('bio-photos').remove([decodeURIComponent(path)]);
-      }
       await savePhotoList(photos.filter((u) => u !== url));
     } catch (e) {
       Alert.alert('Could not delete photo', e.message);
@@ -144,9 +147,26 @@ export default function BiographyScreen({ route }) {
   }
 
   const hasContent = bio && (bio.summary || bio.occupation || bio.hometown);
+  const canEdit = rights.canEditStory;
 
   return (
     <Screen>
+      {!canEdit ? (
+        <View style={styles.lockedCard}>
+          <Text style={styles.lockedText}>
+            Only {personName || 'this person'}'s immediate family, whoever started this story, or a family admin can change it.
+          </Text>
+          {rights.familyId ? (
+            <AppButton
+              title="Ask an admin to change it"
+              variant="secondary"
+              icon="paper-plane-outline"
+              onPress={() => navigation.navigate('RequestChange', { familyId: rights.familyId, personId, about: 'story' })}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
       <Text style={styles.sectionHeading}>Their story</Text>
       {editing ? (
         <View style={styles.card}>
@@ -206,12 +226,14 @@ export default function BiographyScreen({ route }) {
               message="A few lines about who they were is plenty to start with."
             />
           )}
-          <AppButton
-            title={hasContent ? 'Edit story' : 'Write their story'}
-            variant={hasContent ? 'secondary' : 'primary'}
-            icon="create-outline"
-            onPress={startEditing}
-          />
+          {canEdit ? (
+            <AppButton
+              title={hasContent ? 'Edit story' : 'Write their story'}
+              variant={hasContent ? 'secondary' : 'primary'}
+              icon="create-outline"
+              onPress={startEditing}
+            />
+          ) : null}
         </View>
       )}
 
@@ -226,33 +248,37 @@ export default function BiographyScreen({ route }) {
                 <Pressable
                   style={{ flex: 1 }}
                   onPress={() => setViewingPhoto(url)}
-                  onLongPress={() => confirmDeletePhoto(url)}
+                  onLongPress={canEdit ? () => confirmDeletePhoto(url) : undefined}
                   accessibilityRole="imagebutton"
                   accessibilityLabel="View photo"
                 >
                   <Image source={{ uri: url }} style={styles.photo} />
                 </Pressable>
-                <Pressable
-                  style={styles.photoDelete}
-                  onPress={() => confirmDeletePhoto(url)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete photo"
-                >
-                  <Ionicons name="trash-outline" size={16} color={colors.textOnPrimary} />
-                </Pressable>
+                {canEdit ? (
+                  <Pressable
+                    style={styles.photoDelete}
+                    onPress={() => confirmDeletePhoto(url)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete photo"
+                  >
+                    <Ionicons name="trash-outline" size={16} color={colors.textOnPrimary} />
+                  </Pressable>
+                ) : null}
               </View>
             ))}
           </View>
         )}
-        <AppButton
-          title="Add a photo"
-          variant="secondary"
-          icon="image-outline"
-          onPress={addPhoto}
-          loading={uploading}
-          style={{ marginTop: spacing.md }}
-        />
+        {canEdit ? (
+          <AppButton
+            title="Add a photo"
+            variant="secondary"
+            icon="image-outline"
+            onPress={addPhoto}
+            loading={uploading}
+            style={{ marginTop: spacing.md }}
+          />
+        ) : null}
       </View>
 
       <Modal
@@ -286,6 +312,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     ...shadow.card,
   },
+  lockedCard: { backgroundColor: colors.primarySoft, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.lg, gap: spacing.md },
+  lockedText: { color: colors.text, fontSize: fontSize.sm, lineHeight: 20 },
   block: { marginBottom: spacing.md },
   label: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.xs },
   value: { color: colors.text, fontSize: fontSize.md, lineHeight: 24 },

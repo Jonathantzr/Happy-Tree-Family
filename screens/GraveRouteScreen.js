@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../lib/supabase';
+import { getPersonRights } from '../lib/permissions';
 import { colors, spacing, radius, fontSize, fontWeight, touchTarget, shadow } from '../lib/theme';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
@@ -25,7 +26,7 @@ const IconBtn = ({ icon, label, onPress, color = colors.primary }) => (
 const EMPTY_GRAVE = { cemetery_name: '', cemetery_map_link: '', cemetery_address: '', general_notes: '' };
 const EMPTY_STEP = { title: '', description: '', distance_hint: '', photo_url: '', newPhoto: null };
 
-export default function GraveRouteScreen({ route }) {
+export default function GraveRouteScreen({ route, navigation }) {
   const params = route.params || {};
   const personId = params.personId || params.person?.id || params.id;
   const personName = params.personName || params.person?.name || params.name || 'this person';
@@ -37,8 +38,12 @@ export default function GraveRouteScreen({ route }) {
   const [graveForm, setGraveForm] = useState(EMPTY_GRAVE);
   const [editingGrave, setEditingGrave] = useState(false);
   const [stepForm, setStepForm] = useState(null);
+  // may you change these directions? (your immediate family, or directions you
+  // wrote or nobody has written — see lib/permissions.js)
+  const [rights, setRights] = useState({ canEditGrave: false });
   const load = useCallback(async () => {
     if (!personId) { setLoading(false); return; }
+    setRights(await getPersonRights(personId));
     const { data: g, error } = await supabase
       .from('graves').select('*').eq('person_id', personId)
       .order('created_at').limit(1).maybeSingle();
@@ -183,11 +188,29 @@ export default function GraveRouteScreen({ route }) {
     );
   }
 
+  const canEdit = rights.canEditGrave;
+
   return (
     <Screen>
       <Text style={styles.intro}>How to find the grave of {personName}</Text>
 
-      {editingGrave ? (
+      {!canEdit ? (
+        <View style={styles.lockedCard}>
+          <Text style={styles.lockedText}>
+            Only {personName}'s immediate family, whoever wrote these directions, or a family admin can change them.
+          </Text>
+          {rights.familyId ? (
+            <AppButton
+              title="Ask an admin to change them"
+              variant="secondary"
+              icon="paper-plane-outline"
+              onPress={() => navigation.navigate('RequestChange', { familyId: rights.familyId, personId, about: 'directions' })}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      {editingGrave && canEdit ? (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{grave ? 'Edit cemetery' : 'First, where is the cemetery?'}</Text>
           <Text style={styles.help}>
@@ -249,27 +272,30 @@ export default function GraveRouteScreen({ route }) {
             {grave.cemetery_map_link ? (
               <AppButton title="Open in Maps" icon="navigate-outline" compact onPress={openMap} style={styles.rowButton} />
             ) : null}
-            <AppButton
-              title="Edit"
-              variant="secondary"
-              icon="create-outline"
-              compact
-              onPress={() => setEditingGrave(true)}
-              style={styles.rowButton}
-            />
+            {canEdit ? (
+              <AppButton
+                title="Edit"
+                variant="secondary"
+                icon="create-outline"
+                compact
+                onPress={() => setEditingGrave(true)}
+                style={styles.rowButton}
+              />
+            ) : null}
           </View>
         </View>
       ) : (
         <EmptyState icon="cloud-offline-outline" title="Could not load the directions" message="Please go back and try again." />
       )}
 
-      {grave && !editingGrave && (
+      {grave && !(editingGrave && canEdit) && (
         <View>
           <Text style={styles.sectionHeading}>From the entrance to the grave</Text>
           {steps.length === 0 && !stepForm && (
             <Text style={styles.help}>
-              No steps yet. Add them in order, like: "Enter the east gate" → "Park by the main office" →
-              "Walk 100m past the big tree". Photos are optional!
+              {canEdit
+                ? 'No steps yet. Add them in order, like: "Enter the east gate" → "Park by the main office" → "Walk 100m past the big tree". Photos are optional!'
+                : 'No steps have been added yet.'}
             </Text>
           )}
 
@@ -284,6 +310,7 @@ export default function GraveRouteScreen({ route }) {
               {s.distance_hint ? <Text style={styles.muted}>{s.distance_hint}</Text> : null}
               {s.description ? <Text style={styles.body}>{s.description}</Text> : null}
               {s.photo_url ? <Image source={{ uri: s.photo_url }} style={styles.photo} /> : null}
+              {canEdit ? (
               <View style={styles.stepActions}>
                 {i > 0 ? <IconBtn icon="arrow-up" label="Move step up" onPress={() => move(i, -1)} /> : null}
                 {i < steps.length - 1 ? <IconBtn icon="arrow-down" label="Move step down" onPress={() => move(i, 1)} /> : null}
@@ -298,10 +325,11 @@ export default function GraveRouteScreen({ route }) {
                 />
                 <IconBtn icon="trash-outline" label="Delete step" color={colors.danger} onPress={() => deleteStep(s)} />
               </View>
+              ) : null}
             </View>
           ))}
 
-          {stepForm ? (
+          {!canEdit ? null : stepForm ? (
             <View style={styles.card}>
               <Text style={[styles.cardTitle, { marginBottom: spacing.md }]}>{stepForm.id ? 'Edit step' : 'New step'}</Text>
               <TextField
@@ -359,6 +387,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   intro: { color: colors.textMuted, fontSize: fontSize.sm, marginBottom: spacing.md },
   sectionHeading: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.bold, marginTop: spacing.sm, marginBottom: spacing.sm },
+  lockedCard: { backgroundColor: colors.primarySoft, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, gap: spacing.md },
+  lockedText: { color: colors.text, fontSize: fontSize.sm, lineHeight: 20 },
   help: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20, marginBottom: spacing.md },
   card: {
     backgroundColor: colors.surface,

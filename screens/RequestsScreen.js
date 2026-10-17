@@ -22,8 +22,8 @@ const STATUS_WORDS = { pending: 'Waiting', approved: 'Approved', rejected: 'Reje
 
 // Change requests for one family. Admins see everyone's and can approve or
 // reject; members see the ones they sent and whether they were approved.
-export default function RequestsScreen({ route }) {
-  const { familyId } = route.params;
+export default function RequestsScreen({ route, navigation }) {
+  const { familyId, familyName } = route.params;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -44,7 +44,7 @@ export default function RequestsScreen({ route }) {
 
     const { data, error } = await supabase
       .from('change_requests')
-      .select('*, persons(name_en, name_pinyin, name_cn, gender, birth_date), requester:users!change_requests_requested_by_fkey(display_name)')
+      .select('*, persons(name_en, name_pinyin, name_cn, gender, birth_date, is_deceased, death_date), requester:users!change_requests_requested_by_fkey(display_name)')
       .eq('family_id', familyId)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -72,11 +72,22 @@ export default function RequestsScreen({ route }) {
 
   function confirmReview(request, approve) {
     const who = personLabel(request.persons);
+    // a request with only a note changes nothing by itself: the admin makes
+    // the change by hand, then marks it done
+    if (approve && noteOnly(request)) {
+      Alert.alert('Mark as done?', `Nothing changes by itself — this request is only a note. Make the change on ${who}'s page first, then mark it done.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Mark as done', onPress: () => review(request, true) },
+      ]);
+      return;
+    }
     Alert.alert(approve ? 'Approve this change?' : 'Reject this change?', approve ? `${who}'s entry will be updated.` : `${who}'s entry stays as it is.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: approve ? 'Approve' : 'Reject', style: approve ? 'default' : 'destructive', onPress: () => review(request, approve) },
     ]);
   }
+
+  const noteOnly = (request) => Object.keys(request.changes || {}).length === 0;
 
   if (loading) {
     return (
@@ -107,10 +118,21 @@ export default function RequestsScreen({ route }) {
       ))}
       {r.note ? <Text style={styles.note}>"{r.note}"</Text> : null}
       {isAdmin && r.status === 'pending' ? (
-        <View style={styles.buttons}>
-          <AppButton title="Reject" variant="dangerOutline" compact style={{ flex: 1 }} onPress={() => confirmReview(r, false)} disabled={busyId === r.id} />
-          <AppButton title="Approve" icon="checkmark" compact style={{ flex: 1 }} onPress={() => confirmReview(r, true)} loading={busyId === r.id} />
-        </View>
+        <>
+          <View style={styles.buttons}>
+            <AppButton title="Reject" variant="dangerOutline" compact style={{ flex: 1 }} onPress={() => confirmReview(r, false)} disabled={busyId === r.id} />
+            <AppButton title={noteOnly(r) ? 'Done' : 'Approve'} icon="checkmark" compact style={{ flex: 1 }} onPress={() => confirmReview(r, true)} loading={busyId === r.id} />
+          </View>
+          {r.persons ? (
+            <AppButton
+              title={`Open ${personLabel(r.persons)}`}
+              variant="ghost"
+              compact
+              onPress={() => navigation.navigate('Person', { familyId, familyName, personId: r.person_id, personName: personLabel(r.persons) })}
+              style={{ marginTop: spacing.xs }}
+            />
+          ) : null}
+        </>
       ) : null}
     </View>
   );
@@ -132,7 +154,7 @@ export default function RequestsScreen({ route }) {
     >
       <Text style={styles.intro}>
         {isAdmin
-          ? 'Family members can ask for changes to their own entry. Approving updates the family record straight away.'
+          ? 'Family members can change their own immediate family themselves. For anyone else they ask here. Approving updates the family record straight away.'
           : 'Changes you have asked for. A family admin approves or rejects them.'}
       </Text>
 

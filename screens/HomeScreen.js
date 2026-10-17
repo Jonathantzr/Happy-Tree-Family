@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, Pressable, RefreshControl, Keyboard } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,8 @@ import AppButton from '../components/AppButton';
 import TextField from '../components/TextField';
 import EmptyState from '../components/EmptyState';
 import TraditionPicker from '../components/TraditionPicker';
+import CountBadge from '../components/CountBadge';
+import { getUnseenCounts } from '../lib/changeLog';
 import { followsChinese, traditionFields } from '../lib/traditions';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I — easy to read aloud
@@ -35,10 +38,18 @@ export default function HomeScreen({ navigation }) {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joining, setJoining] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [newChanges, setNewChanges] = useState({}); // { familyId: count } — admins only
 
   useEffect(() => {
     fetchFamilies();
   }, []);
+
+  // the red numbers are refreshed every time you come back to this screen
+  useFocusEffect(
+    useCallback(() => {
+      getUnseenCounts().then(setNewChanges);
+    }, [])
+  );
 
   async function fetchFamilies() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -59,7 +70,7 @@ export default function HomeScreen({ navigation }) {
 
   async function handleRefresh() {
     setRefreshing(true);
-    await fetchFamilies();
+    await Promise.all([fetchFamilies(), getUnseenCounts().then(setNewChanges)]);
     setRefreshing(false);
   }
 
@@ -233,6 +244,8 @@ export default function HomeScreen({ navigation }) {
                   {item.role === 'admin' ? 'You are an admin' : 'You are a member'}
                 </Text>
               </View>
+              {/* admins: changes by other people since you last opened Recent changes */}
+              <CountBadge count={newChanges[item.families.id]} label="new changes" />
               <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </Pressable>
             <View style={styles.codeRow}>

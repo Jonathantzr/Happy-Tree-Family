@@ -9,6 +9,7 @@ import Screen from '../components/Screen';
 import Avatar from '../components/Avatar';
 import { formatPersonMeta, askYesNo } from '../lib/personHelpers';
 import { claimPerson, releasePerson } from '../lib/profile';
+import { getPersonRights } from '../lib/permissions';
 import { buildGraph, describeRelation, relationText } from '../lib/relationships';
 import { getTraditions, followsChinese } from '../lib/traditions';
 import { loadNameBook, lineGenerations, childIndexOf, characterAt, characterText, usesCharacter, isChinese } from '../lib/nameBook';
@@ -26,6 +27,7 @@ export default function PersonScreen({ route, navigation }) {
   const [grave, setGrave] = useState(null);
   const [stepCount, setStepCount] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [rights, setRights] = useState({ canEdit: false }); // what you may change here (lib/permissions.js)
   const [selfPersonId, setSelfPersonId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [nameBook, setNameBook] = useState({ book: null, entries: [] });
@@ -86,6 +88,7 @@ export default function PersonScreen({ route, navigation }) {
         .maybeSingle();
       setIsAdmin(fm?.role === 'admin');
     }
+    setRights(await getPersonRights(personId));
 
     setLoading(false);
   }, [familyId, personId]);
@@ -232,10 +235,10 @@ export default function PersonScreen({ route, navigation }) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const { error } = await supabase.from('persons').delete().eq('id', person.id);
+            const { data, error } = await supabase.from('persons').delete().eq('id', person.id).select('id');
             setMenuOpen(false);
-            if (error) {
-              Alert.alert('Could not delete', error.message);
+            if (error || !data || data.length === 0) {
+              Alert.alert('Could not delete', error ? error.message : 'Only a family admin can delete someone.');
               return;
             }
             navigation.goBack();
@@ -400,16 +403,19 @@ export default function PersonScreen({ route, navigation }) {
         <Pressable style={styles.menuOverlay} onPress={() => setMenuOpen(false)}>
           <Pressable style={[styles.menuSheet, { paddingBottom: insets.bottom + spacing.sm }]} onPress={() => {}}>
             <Text style={styles.menuTitle} numberOfLines={1}>{personLabel(person)}</Text>
-            {isMe && !isAdmin ? (
-              // your own entry is kept by the family: members ask an admin to change it
-              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goRequestChange}>
-                <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
-                <Text style={styles.menuItemText}>Request a change</Text>
-              </Pressable>
-            ) : (
+            {rights.canEdit ? (
               <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goEdit}>
                 <Ionicons name="create-outline" size={20} color={colors.text} />
                 <Text style={styles.menuItemText}>Edit details</Text>
+              </Pressable>
+            ) : (
+              // outside your immediate family and not added by you: an admin approves the change
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={goRequestChange}>
+                <Ionicons name="paper-plane-outline" size={20} color={colors.text} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuItemText}>Request a change</Text>
+                  <Text style={styles.menuItemHint}>Not your immediate family, so an admin approves it.</Text>
+                </View>
               </Pressable>
             )}
             {canClaim ? (
@@ -424,10 +430,13 @@ export default function PersonScreen({ route, navigation }) {
                 <Text style={styles.menuItemText}>This isn't me</Text>
               </Pressable>
             ) : null}
-            <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={handleDelete}>
-              <Ionicons name="trash-outline" size={20} color={colors.danger} />
-              <Text style={[styles.menuItemText, styles.menuItemDanger]}>Delete this person</Text>
-            </Pressable>
+            {isAdmin ? (
+              // only family admins can delete someone
+              <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={handleDelete}>
+                <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                <Text style={[styles.menuItemText, styles.menuItemDanger]}>Delete this person</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               style={({ pressed }) => [styles.menuItem, styles.menuCancel, pressed && styles.pressed]}
               onPress={() => setMenuOpen(false)}
@@ -486,6 +495,7 @@ const styles = StyleSheet.create({
   menuTitle: { color: colors.textMuted, fontSize: fontSize.sm, textAlign: 'center', marginBottom: spacing.sm },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.sm },
   menuItemText: { color: colors.text, fontSize: fontSize.md },
+  menuItemHint: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
   menuItemDanger: { color: colors.danger },
   menuCancel: { justifyContent: 'center', borderTopWidth: 1, borderTopColor: colors.surfaceAlt, marginTop: spacing.xs },
   menuCancelText: { color: colors.textMuted, fontSize: fontSize.md, fontWeight: fontWeight.medium },

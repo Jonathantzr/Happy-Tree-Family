@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Keyboard, Switch } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { colors, spacing, fontSize, fontWeight } from '../lib/theme';
+import { colors, spacing, fontSize, fontWeight, touchTarget } from '../lib/theme';
 import { isoToDate, toISODate } from '../lib/personHelpers';
 import { sendChangeRequest, describeChanges } from '../lib/profile';
 import Screen from '../components/Screen';
@@ -12,10 +12,12 @@ import GenderPicker from '../components/GenderPicker';
 import CharacterFinder from '../components/CharacterFinder';
 import { getTraditions, followsChinese } from '../lib/traditions';
 
-// For members who want their own entry in the family changed: fill in what
-// it should say, and a family admin approves or rejects it.
+// For changes you aren't allowed to make yourself (someone outside your
+// immediate family that you didn't add — see lib/permissions.js): fill in
+// what the entry should say, or just write a note (e.g. about their story or
+// grave directions), and a family admin approves or rejects it.
 export default function RequestChangeScreen({ route, navigation }) {
-  const { familyId, personId } = route.params;
+  const { familyId, personId, about } = route.params; // about: 'story' | 'directions' when opened from those screens
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [person, setPerson] = useState(null);
@@ -24,6 +26,8 @@ export default function RequestChangeScreen({ route, navigation }) {
   const [chinese, setChinese] = useState(false); // family follows Chinese traditions: show the Chinese name box
   const [birthDate, setBirthDate] = useState(null);
   const [gender, setGender] = useState(null);
+  const [isDeceased, setIsDeceased] = useState(false);
+  const [deathDate, setDeathDate] = useState(null);
   const [note, setNote] = useState('');
 
   useEffect(() => {
@@ -40,6 +44,8 @@ export default function RequestChangeScreen({ route, navigation }) {
           setNameCn(data.name_en || data.name_pinyin ? data.name_cn || '' : '');
           setBirthDate(isoToDate(data.birth_date));
           setGender(data.gender || null);
+          setIsDeceased(!!data.is_deceased);
+          setDeathDate(isoToDate(data.death_date));
         }
         setLoading(false);
       });
@@ -54,9 +60,13 @@ export default function RequestChangeScreen({ route, navigation }) {
     const iso = toISODate(birthDate);
     if (iso !== (person.birth_date || null)) changes.birth_date = iso;
     if ((gender || null) !== (person.gender || null)) changes.gender = gender;
+    if (isDeceased !== !!person.is_deceased) changes.is_deceased = isDeceased;
+    const deathIso = isDeceased ? toISODate(deathDate) : null;
+    if (isDeceased && deathIso !== (person.death_date || null)) changes.death_date = deathIso;
 
-    if (Object.keys(changes).length === 0) {
-      Alert.alert('Nothing changed', 'Change at least one detail before sending.');
+    // a note on its own is fine too (e.g. "the cemetery name is wrong")
+    if (Object.keys(changes).length === 0 && !note.trim()) {
+      Alert.alert('Nothing to send', 'Change at least one detail, or write a note saying what should change.');
       return;
     }
     Keyboard.dismiss();
@@ -67,7 +77,7 @@ export default function RequestChangeScreen({ route, navigation }) {
       Alert.alert('Could not send the request', error.message);
       return;
     }
-    Alert.alert('Request sent', `A family admin will review it:\n\n${describeChanges(changes, person).join('\n')}`);
+    Alert.alert('Request sent', `A family admin will review it:\n\n${[...describeChanges(changes, person), note.trim()].filter(Boolean).join('\n')}`);
     navigation.goBack();
   }
 
@@ -89,10 +99,17 @@ export default function RequestChangeScreen({ route, navigation }) {
     );
   }
 
+  const personName = person.name_en || person.name_pinyin || person.name_cn || 'this person';
+
   return (
     <Screen keyboardAvoiding>
       <Text style={styles.intro}>
-        Change what you'd like your entry to say. A family admin will approve or reject the change.
+        {about
+          ? `Write in the note below what should change in ${personName}'s ${about === 'story' ? 'story or photos' : 'grave directions'}. A family admin will look at it.`
+          : `Change what ${personName}'s entry should say, or describe it in the note. A family admin will approve or reject it.`}
+      </Text>
+      <Text style={styles.why}>
+        You can change your own immediate family and anything you added yourself. Everything else goes through an admin.
       </Text>
       <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="words" returnKeyType="next" />
       {chinese ? (
@@ -111,9 +128,22 @@ export default function RequestChangeScreen({ route, navigation }) {
       ) : null}
       <DateField label="Birth date" placeholder="Tap to pick a date" value={birthDate} onChange={setBirthDate} />
       <GenderPicker value={gender} onChange={setGender} />
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>This person has passed away</Text>
+        <Switch
+          value={isDeceased}
+          onValueChange={setIsDeceased}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={colors.surface}
+          ios_backgroundColor={colors.border}
+        />
+      </View>
+      {isDeceased ? (
+        <DateField label="Date of passing (optional)" placeholder="Tap to pick a date" value={deathDate} onChange={setDeathDate} />
+      ) : null}
       <TextField
-        label="Note for the admin (optional)"
-        placeholder="e.g. My full name, not my nickname"
+        label={about ? 'Note for the admin' : 'Note for the admin (optional)'}
+        placeholder="e.g. Their full name, not a nickname"
         value={note}
         onChangeText={setNote}
         multiline
@@ -125,6 +155,9 @@ export default function RequestChangeScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  intro: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20, marginBottom: spacing.lg },
+  intro: { color: colors.text, fontSize: fontSize.md, lineHeight: 22, marginBottom: spacing.sm },
+  why: { color: colors.textMuted, fontSize: fontSize.sm, lineHeight: 20, marginBottom: spacing.lg },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md, minHeight: touchTarget, marginBottom: spacing.md },
+  switchLabel: { flex: 1, color: colors.text, fontSize: fontSize.md },
   heading: { color: colors.text, fontSize: fontSize.lg, fontWeight: fontWeight.bold },
 });

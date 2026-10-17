@@ -13,6 +13,8 @@ import FamilyDetailScreen from '../screens/FamilyDetailScreen';
 import TreeScreen from '../screens/TreeScreen';
 import NameBookScreen from '../screens/NameBookScreen';
 import FamilySettingsScreen from '../screens/FamilySettingsScreen';
+import MembersScreen from '../screens/MembersScreen';
+import RecentChangesScreen from '../screens/RecentChangesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ClaimScreen from '../screens/ClaimScreen';
 import PersonFormScreen from '../screens/PersonFormScreen';
@@ -65,6 +67,8 @@ function FamiliesStackScreen() {
       <FamiliesStack.Screen name="Tree" component={TreeScreen} options={{ title: 'Family tree' }} />
       <FamiliesStack.Screen name="NameBook" component={NameBookScreen} options={{ title: 'Name book' }} />
       <FamiliesStack.Screen name="FamilySettings" component={FamilySettingsScreen} options={{ title: 'Family settings' }} />
+      <FamiliesStack.Screen name="Members" component={MembersScreen} options={{ title: 'Members and admins' }} />
+      <FamiliesStack.Screen name="RecentChanges" component={RecentChangesScreen} options={{ title: 'Recent changes' }} />
       <FamiliesStack.Screen name="Claim" component={ClaimScreen} options={{ title: 'Join the family tree' }} />
       <FamiliesStack.Screen
         name="PersonForm"
